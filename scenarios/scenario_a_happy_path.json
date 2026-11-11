@@ -1,0 +1,52 @@
+{
+  "scenario_id": "scenario_a_happy_path",
+  "title": "Scenario A: Happy Path Autonomous Commerce",
+  "description": "Buyer agent negotiates $120 for logo design. Mandate Gateway verifies budget and constraints. PayPal holds funds via authorization. Seller delivers verified SVGs and vectors. AI Arbiter inspects against 3 criteria and PASSES. PayPal captures funds to complete release.",
+  "mandate": {
+    "version": 1,
+    "currency": "USD",
+    "max_total_minor": 50000,
+    "max_per_transaction_minor": 20000,
+    "daily_limit_minor": 30000,
+    "allowed_merchant_categories": ["freelance_design", "software_services"],
+    "allowed_counterparties": ["seller_agent_acme"],
+    "allowed_hours_utc": {"start": "00:00", "end": "23:59"},
+    "velocity": {"max_txns_per_hour": 10},
+    "escalate_above_minor": 15000,
+    "require_escrow": true
+  },
+  "negotiation": {
+    "buyer_offer_minor": 12000,
+    "seller_quote_minor": 12000,
+    "service": "Logo Design Package (3 concepts + scalable vectors)"
+  },
+  "gateway_decision": {
+    "decision": "APPROVED",
+    "risk_score": 0.04,
+    "rules_passed": ["R1_MANDATE_VALID", "R2_PER_TRANSACTION_CAP", "R3_TOTAL_BUDGET", "R4_DAILY_LIMIT", "R5_COUNTERPARTY", "R6_CATEGORY", "R7_TIME_WINDOW", "R8_VELOCITY", "R9_ESCALATION_THRESHOLD", "R10_CURRENCY"]
+  },
+  "paypal_escrow": {
+    "intent": "AUTHORIZE",
+    "amount_minor": 12000,
+    "currency": "USD",
+    "status": "FUNDS_HELD"
+  },
+  "deliverable": {
+    "content_ref": "https://storage.mandate.dev/deliverables/verified_brand_package.zip",
+    "submission_notes": "Delivered package containing 3 distinct logo variations, scalable vector .svg and .ai sources, plus 300dpi transparent PNG exports adhering to spec."
+  },
+  "arbitration": {
+    "verdict": "PASS",
+    "confidence": 0.98,
+    "criteria": [
+      {"criterion": "Includes 3 logo variants", "met": true},
+      {"criterion": "Includes scalable vector SVGs", "met": true},
+      {"criterion": "Includes PNG transparent exports", "met": true}
+    ]
+  },
+  "settlement": {
+    "action": "CAPTURE",
+    "captured_amount_minor": 12000,
+    "final_escrow_state": "RELEASED"
+  }
+}

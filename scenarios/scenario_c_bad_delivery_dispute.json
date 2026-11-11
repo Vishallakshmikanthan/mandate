@@ -1,0 +1,49 @@
+{
+  "scenario_id": "scenario_c_bad_delivery_dispute",
+  "title": "Scenario C: Substandard Delivery & AI Escrow Dispute",
+  "description": "Funds are authorized ($120) under contract spec requiring 3 logo variants and scalable vectors. Seller submits 1 low-effort blurry raster JPG. AI Arbiter objectively inspects deliverables, records failures on criteria 1 & 2, and renders FAIL verdict. Mandate automatically executes PayPal Void to restore full funds to buyer.",
+  "spec": {
+    "criteria": [
+      "Includes 3 logo variants",
+      "Includes scalable vector SVGs",
+      "Includes PNG transparent exports"
+    ]
+  },
+  "escrow_hold": {
+    "held_amount_minor": 12000,
+    "currency": "USD",
+    "state": "FUNDS_HELD"
+  },
+  "seller_submission": {
+    "content_ref": "https://storage.mandate.dev/deliverables/blurry_logo_sample.jpg",
+    "submission_notes": "Here is 1 low-effort raster draft concept. Vectors were too complicated."
+  },
+  "arbiter_inspection": {
+    "verdict": "FAIL",
+    "confidence": 0.94,
+    "criteria_results": [
+      {
+        "criterion": "Includes 3 logo variants",
+        "met": false,
+        "evidence": "Only 1 low-resolution concept provided."
+      },
+      {
+        "criterion": "Includes scalable vector SVGs",
+        "met": false,
+        "evidence": "No vector assets or SVG files found in deliverable."
+      },
+      {
+        "criterion": "Includes PNG transparent exports",
+        "met": true,
+        "evidence": "One low-res raster image present."
+      }
+    ],
+    "explanation": "Critical contractual specifications unmet: delivered 1 blurry sample instead of 3 vector logos."
+  },
+  "paypal_action": {
+    "action": "VOID_AUTHORIZATION",
+    "result": "VOIDED",
+    "buyer_refunded_minor": 12000,
+    "final_escrow_state": "REFUNDED"
+  }
+}
