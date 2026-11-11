@@ -35,22 +35,34 @@ class MockLLMProvider(LLMProvider):
         user_prompt: str,
         response_model: Type[T]
     ) -> T:
-        user_lower = user_prompt.lower()
         model_name = response_model.__name__
+
+        # Extract untrusted context or payload if present
+        untrusted_text = user_prompt.lower()
+        if "<<<begin_untrusted_context>>>" in untrusted_text:
+            parts = untrusted_text.split("<<<begin_untrusted_context>>>")
+            if len(parts) > 1:
+                untrusted_text = parts[1].split("<<<end_untrusted_context>>>")[0]
+        elif "<<<begin_deliverable_payload>>>" in untrusted_text:
+            parts = untrusted_text.split("<<<begin_deliverable_payload>>>")
+            if len(parts) > 1:
+                untrusted_text = parts[1].split("<<<end_deliverable_payload>>>")[0]
 
         # Handle RiskScorer output
         if "risk" in model_name.lower():
-            if any(term in user_lower for term in [
+            attack_indicators = [
                 "ignore", "system update", "override", "wire", "urgent",
-                "emergency", "bypass", "transfer to account", "new instructions"
-            ]):
+                "emergency", "bypass", "transfer to account", "new instructions",
+                "directive", "disregard", "subpoena", "developer mode"
+            ]
+            if any(term in untrusted_text for term in attack_indicators):
                 data = {
                     "risk_score": 0.95,
                     "flags": ["instruction_override_detected", "adversarial_prompt_injection", "fake_urgency"],
                     "recommendation": "BLOCK",
                     "reasoning": "Adversarial prompt injection attempt detected: text commands agent to override rules and transfer money."
                 }
-            elif "expensive" in user_lower or "5000" in user_lower:
+            elif "expensive" in untrusted_text or "5000" in untrusted_text:
                 data = {
                     "risk_score": 0.65,
                     "flags": ["price_anomaly"],
@@ -68,7 +80,8 @@ class MockLLMProvider(LLMProvider):
 
         # Handle Arbiter output
         if "arbiter" in model_name.lower():
-            if "low-effort" in user_lower or "blurry" in user_lower or "fail" in user_lower or "single concept" in user_lower:
+            combined_eval_text = untrusted_text.lower()
+            if any(term in combined_eval_text for term in ["blurry", "low-effort", "single concept", "substandard", "missing"]):
                 data = {
                     "verdict": "FAIL",
                     "confidence": 0.94,
@@ -80,7 +93,7 @@ class MockLLMProvider(LLMProvider):
                     "partial_ratio": 0.0,
                     "explanation": "Critical contractual specifications unmet: delivered 1 blurry sample instead of 3 vector logos."
                 }
-            elif "partial" in user_lower:
+            elif "partial" in combined_eval_text:
                 data = {
                     "verdict": "PARTIAL",
                     "confidence": 0.88,

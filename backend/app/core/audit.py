@@ -9,9 +9,18 @@ from app.core.mandate_signing import canonicalize_policy
 GENESIS_HASH = "0" * 64
 
 
+def normalize_ts(ts: Any) -> str:
+    """Normalize datetime to consistent ISO string across all DB backends."""
+    if isinstance(ts, datetime):
+        if ts.tzinfo is not None:
+            ts = ts.astimezone(timezone.utc).replace(tzinfo=None)
+        return ts.strftime("%Y-%m-%dT%H:%M:%S.%f")
+    return str(ts)
+
+
 def compute_audit_hash(prev_hash: str, ts: datetime, actor: str, event: str, payload: Dict[str, Any]) -> str:
     """Compute cryptographic SHA-256 hash chaining audit records."""
-    ts_str = ts.isoformat() if isinstance(ts, datetime) else str(ts)
+    ts_str = normalize_ts(ts)
     canonical_payload = canonicalize_policy(payload) if isinstance(payload, dict) else str(payload)
     chain_input = f"{prev_hash}|{ts_str}|{actor}|{event}|{canonical_payload}"
     return hashlib.sha256(chain_input.encode("utf-8")).hexdigest()

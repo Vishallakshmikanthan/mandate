@@ -1,0 +1,279 @@
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from app.db import get_db
+from app.models.escrow import Escrow
+from app.models.deliverable import Deliverable
+from app.models.arbiter import ArbiterVerdictRecord
+from app.schemas.escrow import (
+    EscrowResponse,
+    DeliverableCreate,
+    DeliverableResponse,
+    ArbiterVerdictResponse,
+    HumanDecisionRequest,
+    EscrowState,
+    CriterionResult
+)
+from app.core.escrow_machine import transition_escrow_state
+from app.core.arbiter import evaluate_deliverable_arbitration
+from app.paypal.orders import (
+    create_paypal_order,
+    authorize_paypal_order,
+    capture_paypal_authorization,
+    void_paypal_authorization
+)
+from app.core.stream_broadcaster import emit_timeline_event
+
+router = APIRouter(prefix="/escrows", tags=["Escrows"])
+
+
+def build_escrow_response(e: Escrow) -> EscrowResponse:
+    return EscrowResponse(
+        id=e.id,
+        intent_id=e.intent_id,
+        paypal_order_id=e.paypal_order_id,
+        paypal_authorization_id=e.paypal_authorization_id,
+        paypal_capture_id=e.paypal_capture_id,
+        state=e.state,
+        spec=e.spec or {},
+        hold_expires_at=e.hold_expires_at,
+        created_at=e.created_at,
+        updated_at=e.updated_at,
+        deliverables=[DeliverableResponse.model_validate(d) for d in e.deliverables],
+        verdicts=[
+            ArbiterVerdictResponse(
+                id=v.id,
+                escrow_id=v.escrow_id,
+                verdict=v.verdict,
+                confidence=v.confidence,
+                criteria_results=[CriterionResult.model_validate(c) for c in v.criteria_results],
+                explanation=v.explanation,
+                partial_ratio=v.partial_ratio,
+                model=v.model,
+                created_at=v.created_at
+            )
+            for v in e.verdicts
+        ]
+    )
+
+
+@router.get("", response_model=List[EscrowResponse])
+def list_escrows(db: Session = Depends(get_db)):
+    escrows = db.query(Escrow).order_by(Escrow.created_at.desc()).limit(100).all()
+    return [build_escrow_response(e) for e in escrows]
+
+
+@router.get("/{escrow_id}", response_model=EscrowResponse)
+def get_escrow(escrow_id: str, db: Session = Depends(get_db)):
+    e = db.query(Escrow).filter(Escrow.id == escrow_id).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Escrow contract not found")
+    return build_escrow_response(e)
+
+
+@router.post("/{escrow_id}/deliver", response_model=EscrowResponse)
+async def submit_deliverable(escrow_id: str, req: DeliverableCreate, db: Session = Depends(get_db)):
+    """Seller agent submits deliverable against escrow spec."""
+    e = db.query(Escrow).filter(Escrow.id == escrow_id).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Escrow not found")
+
+    deliverable = Deliverable(
+        escrow_id=e.id,
+        content_ref=req.content_ref,
+        submission_notes=req.submission_notes
+    )
+    db.add(deliverable)
+    db.commit()
+
+    await transition_escrow_state(
+        db=db,
+        escrow=e,
+        new_state=EscrowState.DELIVERED.value,
+        actor="seller_agent",
+        reason="Seller submitted deliverable assets."
+    )
+
+    db.refresh(e)
+    return build_escrow_response(e)
+
+
+@router.post("/{escrow_id}/arbitrate", response_model=EscrowResponse)
+async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
+    """Trigger AI Arbiter to evaluate deliverable and settle PayPal funds."""
+    e = db.query(Escrow).filter(Escrow.id == escrow_id).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Escrow not found")
+
+    if not e.deliverables:
+        raise HTTPException(status_code=400, detail="No deliverable submitted yet to arbitrate.")
+
+    latest_deliverable = e.deliverables[-1]
+
+    # Advance state to UNDER_ARBITRATION
+    await transition_escrow_state(
+        db=db,
+        escrow=e,
+        new_state=EscrowState.UNDER_ARBITRATION.value,
+        actor="arbiter",
+        reason="AI Arbiter inspecting deliverable."
+    )
+
+    verdict_output = await evaluate_deliverable_arbitration(
+        spec=e.spec or {},
+        content_ref=latest_deliverable.content_ref,
+        submission_notes=latest_deliverable.submission_notes
+    )
+
+    verdict_rec = ArbiterVerdictRecord(
+        escrow_id=e.id,
+        verdict=verdict_output.verdict,
+        confidence=verdict_output.confidence,
+        criteria_results=[c.model_dump() for c in verdict_output.criteria_results],
+        explanation=verdict_output.explanation,
+        partial_ratio=verdict_output.partial_ratio,
+        model="arbiter-core-v1"
+    )
+    db.add(verdict_rec)
+    db.commit()
+
+    intent_amount = e.intent.amount_minor if e.intent else 0
+
+    if verdict_output.verdict == "PASS":
+        # Capture PayPal authorization
+        if e.paypal_authorization_id:
+            cap_res = await capture_paypal_authorization(
+                authorization_id=e.paypal_authorization_id,
+                intent_id=e.intent_id,
+                amount_minor=intent_amount
+            )
+            e.paypal_capture_id = cap_res.get("capture_id")
+            db.commit()
+
+        await transition_escrow_state(
+            db=db,
+            escrow=e,
+            new_state=EscrowState.RELEASED.value,
+            actor="paypal",
+            reason=f"Arbiter PASS. Captured full amount ${intent_amount/100:.2f}."
+        )
+
+    elif verdict_output.verdict == "PARTIAL":
+        partial_cents = int(intent_amount * verdict_output.partial_ratio)
+        if e.paypal_authorization_id:
+            cap_res = await capture_paypal_authorization(
+                authorization_id=e.paypal_authorization_id,
+                intent_id=e.intent_id,
+                amount_minor=partial_cents
+            )
+            e.paypal_capture_id = cap_res.get("capture_id")
+            # Void remainder
+            await void_paypal_authorization(e.paypal_authorization_id, e.intent_id)
+            db.commit()
+
+        await transition_escrow_state(
+            db=db,
+            escrow=e,
+            new_state=EscrowState.PARTIALLY_RELEASED.value,
+            actor="paypal",
+            reason=f"Arbiter PARTIAL ({verdict_output.partial_ratio*100:.0f}%). Captured ${partial_cents/100:.2f}, voided remainder."
+        )
+
+    elif verdict_output.verdict == "FAIL":
+        if e.paypal_authorization_id:
+            await void_paypal_authorization(e.paypal_authorization_id, e.intent_id)
+
+        await transition_escrow_state(
+            db=db,
+            escrow=e,
+            new_state=EscrowState.REFUNDED.value,
+            actor="paypal",
+            reason=f"Arbiter FAIL. Authorization voided. Buyer refunded."
+        )
+
+    else:  # NEEDS_HUMAN
+        await transition_escrow_state(
+            db=db,
+            escrow=e,
+            new_state=EscrowState.NEEDS_HUMAN.value,
+            actor="arbiter",
+            reason="Confidence below threshold or ambiguous deliverable. Human supervisor required."
+        )
+
+    db.refresh(e)
+    return build_escrow_response(e)
+
+
+@router.post("/{escrow_id}/human-decision", response_model=EscrowResponse)
+async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: Session = Depends(get_db)):
+    """Human supervisor override for escalated or contested escrows."""
+    e = db.query(Escrow).filter(Escrow.id == escrow_id).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Escrow not found")
+
+    action_upper = req.action.strip().upper()
+
+    if action_upper == "APPROVE":
+        if e.state == EscrowState.ESCALATED.value:
+            # Human approves escalated intent -> advance to ORDER_CREATED
+            order_res = await create_paypal_order(
+                intent_id=e.intent_id,
+                amount_minor=e.intent.amount_minor,
+                currency=e.intent.currency,
+                description=e.intent.description
+            )
+            e.paypal_order_id = order_res.get("order_id")
+            db.commit()
+            await transition_escrow_state(
+                db=db,
+                escrow=e,
+                new_state=EscrowState.ORDER_CREATED.value,
+                actor="human",
+                reason=f"Human supervisor approved escalation. Notes: {req.notes or 'None'}"
+            )
+        elif e.state in (EscrowState.NEEDS_HUMAN.value, EscrowState.UNDER_ARBITRATION.value):
+            if e.paypal_authorization_id:
+                cap_res = await capture_paypal_authorization(
+                    authorization_id=e.paypal_authorization_id,
+                    intent_id=e.intent_id,
+                    amount_minor=e.intent.amount_minor
+                )
+                e.paypal_capture_id = cap_res.get("capture_id")
+                db.commit()
+            await transition_escrow_state(
+                db=db,
+                escrow=e,
+                new_state=EscrowState.RELEASED.value,
+                actor="human",
+                reason=f"Human supervisor manually approved release. Notes: {req.notes or 'None'}"
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Cannot approve escrow in state {e.state}")
+
+    elif action_upper == "REJECT":
+        if e.state == EscrowState.ESCALATED.value:
+            await transition_escrow_state(
+                db=db,
+                escrow=e,
+                new_state=EscrowState.BLOCKED.value,
+                actor="human",
+                reason=f"Human supervisor rejected escalated intent. Notes: {req.notes or 'None'}"
+            )
+        elif e.state in (EscrowState.NEEDS_HUMAN.value, EscrowState.UNDER_ARBITRATION.value, EscrowState.FUNDS_HELD.value):
+            if e.paypal_authorization_id:
+                await void_paypal_authorization(e.paypal_authorization_id, e.intent_id)
+            await transition_escrow_state(
+                db=db,
+                escrow=e,
+                new_state=EscrowState.REFUNDED.value,
+                actor="human",
+                reason=f"Human supervisor rejected deliverable. Voided authorization. Notes: {req.notes or 'None'}"
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Cannot reject escrow in state {e.state}")
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Invalid action '{req.action}'. Expected 'APPROVE' or 'REJECT'.")
+
+    db.refresh(e)
+    return build_escrow_response(e)
