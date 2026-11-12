@@ -8,6 +8,7 @@ from app.models.webhook import WebhookEvent
 from app.models.redteam import RedTeamRun
 from app.models.counterparty import Counterparty
 from app.models.spend_ledger import SpendLedger
+from app.models.paypal_action import PayPalAction
 
 __all__ = [
     "Mandate",
@@ -20,4 +21,5 @@ __all__ = [
     "RedTeamRun",
     "Counterparty",
     "SpendLedger",
+    "PayPalAction",
 ]

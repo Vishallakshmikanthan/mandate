@@ -141,7 +141,13 @@ async def handle_approval_return(
     )
 
     # 2. Call PayPal authorize
-    auth_res = await authorize_paypal_order(order_id=escrow.paypal_order_id, intent_id=escrow.intent_id)
+    auth_res = await authorize_paypal_order(
+        order_id=escrow.paypal_order_id,
+        intent_id=escrow.intent_id,
+        amount_minor=escrow.intent.amount_minor if escrow.intent else None,
+        escrow_id=escrow.id,
+        db=db
+    )
     escrow.paypal_authorization_id = auth_res["authorization_id"]
     if auth_res.get("hold_expires_at"):
         try:
@@ -253,7 +259,10 @@ async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
             cap_res = await capture_paypal_authorization(
                 authorization_id=e.paypal_authorization_id,
                 intent_id=e.intent_id,
-                amount_minor=intent_amount
+                amount_minor=intent_amount,
+                final_capture=True,
+                escrow_id=e.id,
+                db=db
             )
             e.paypal_capture_id = cap_res.get("capture_id")
             db.commit()
@@ -282,11 +291,12 @@ async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
             cap_res = await capture_paypal_authorization(
                 authorization_id=e.paypal_authorization_id,
                 intent_id=e.intent_id,
-                amount_minor=partial_cents
+                amount_minor=partial_cents,
+                final_capture=True,
+                escrow_id=e.id,
+                db=db
             )
             e.paypal_capture_id = cap_res.get("capture_id")
-            # Void remainder
-            await void_paypal_authorization(e.paypal_authorization_id, e.intent_id)
             db.commit()
 
         # Commit captured amount and release remainder
@@ -313,12 +323,18 @@ async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
             escrow=e,
             new_state=EscrowState.PARTIALLY_RELEASED.value,
             actor="paypal",
-            reason=f"Arbiter PARTIAL ({verdict_output.partial_ratio*100:.0f}%). Captured ${partial_cents/100:.2f}, voided remainder."
+            reason=f"Arbiter PARTIAL ({verdict_output.partial_ratio*100:.0f}%). Captured ${partial_cents/100:.2f} with final capture."
         )
 
     elif verdict_output.verdict == "FAIL":
         if e.paypal_authorization_id:
-            await void_paypal_authorization(e.paypal_authorization_id, e.intent_id)
+            await void_paypal_authorization(
+                authorization_id=e.paypal_authorization_id,
+                intent_id=e.intent_id,
+                amount_minor=intent_amount,
+                escrow_id=e.id,
+                db=db
+            )
 
         # Release allocation in ledger
         if e.intent:
@@ -408,7 +424,9 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
                 payee_email=cp.paypal_email if cp else None,
                 payee_merchant_id=cp.paypal_merchant_id if cp else None,
                 return_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{e.id}?approved=true",
-                cancel_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{e.id}?cancelled=true"
+                cancel_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{e.id}?cancelled=true",
+                escrow_id=e.id,
+                db=db
             )
             e.paypal_order_id = order_res.get("order_id")
             db.commit()
@@ -424,7 +442,10 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
                 cap_res = await capture_paypal_authorization(
                     authorization_id=e.paypal_authorization_id,
                     intent_id=e.intent_id,
-                    amount_minor=e.intent.amount_minor
+                    amount_minor=e.intent.amount_minor,
+                    final_capture=True,
+                    escrow_id=e.id,
+                    db=db
                 )
                 e.paypal_capture_id = cap_res.get("capture_id")
                 db.commit()
@@ -460,7 +481,13 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
             )
         elif e.state in (EscrowState.NEEDS_HUMAN.value, EscrowState.UNDER_ARBITRATION.value, EscrowState.FUNDS_HELD.value, EscrowState.DELIVERED.value):
             if e.paypal_authorization_id:
-                await void_paypal_authorization(e.paypal_authorization_id, e.intent_id)
+                await void_paypal_authorization(
+                    authorization_id=e.paypal_authorization_id,
+                    intent_id=e.intent_id,
+                    amount_minor=e.intent.amount_minor if e.intent else 0,
+                    escrow_id=e.id,
+                    db=db
+                )
 
             # Record RELEASE in spend ledger
             if e.intent:

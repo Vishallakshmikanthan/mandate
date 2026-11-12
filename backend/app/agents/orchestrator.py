@@ -263,7 +263,9 @@ class AgentOrchestrator:
             payee_email=counterparty_record.paypal_email if counterparty_record else None,
             payee_merchant_id=counterparty_record.paypal_merchant_id if counterparty_record else None,
             return_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?approved=true",
-            cancel_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?cancelled=true"
+            cancel_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?cancelled=true",
+            escrow_id=escrow.id,
+            db=self.db
         )
         escrow.paypal_order_id = order_res["order_id"]
         self.db.commit()
@@ -314,7 +316,13 @@ class AgentOrchestrator:
             scenario=self.scenario_name
         )
 
-        auth_res = await authorize_paypal_order(escrow.paypal_order_id, intent.id)
+        auth_res = await authorize_paypal_order(
+            order_id=escrow.paypal_order_id,
+            intent_id=intent.id,
+            amount_minor=intent_amount,
+            escrow_id=escrow.id,
+            db=self.db
+        )
         escrow.paypal_authorization_id = auth_res["authorization_id"]
         if auth_res.get("hold_expires_at"):
             try:
@@ -405,7 +413,10 @@ class AgentOrchestrator:
                 authorization_id=escrow.paypal_authorization_id,
                 intent_id=intent.id,
                 amount_minor=intent_amount,
-                currency="USD"
+                currency="USD",
+                final_capture=True,
+                escrow_id=escrow.id,
+                db=self.db
             )
             escrow.paypal_capture_id = cap_res.get("capture_id")
             self.db.commit()
@@ -423,7 +434,10 @@ class AgentOrchestrator:
             # Void/Refund on FAIL or DISPUTE
             void_res = await void_paypal_authorization(
                 authorization_id=escrow.paypal_authorization_id,
-                intent_id=intent.id
+                intent_id=intent.id,
+                amount_minor=intent_amount,
+                escrow_id=escrow.id,
+                db=self.db
             )
             await transition_escrow_state(
                 db=self.db,

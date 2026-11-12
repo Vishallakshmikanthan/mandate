@@ -18,6 +18,7 @@ from app.models.audit import AuditLog
 from app.models.webhook import WebhookEvent
 from app.models.counterparty import Counterparty
 from app.models.spend_ledger import SpendLedger
+from app.models.paypal_action import PayPalAction
 
 # Use in-memory SQLite with StaticPool so all connections share the memory DB
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -28,6 +29,10 @@ engine = create_engine(
     poolclass=StaticPool
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+import app.db as db_module
+db_module.engine = engine
+db_module.SessionLocal = TestingSessionLocal
 
 
 @pytest.fixture(scope="function")

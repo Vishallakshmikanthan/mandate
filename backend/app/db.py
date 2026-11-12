@@ -49,5 +49,6 @@ def init_db():
     from app.models.redteam import RedTeamRun
     from app.models.counterparty import Counterparty
     from app.models.spend_ledger import SpendLedger
+    from app.models.paypal_action import PayPalAction
 
     Base.metadata.create_all(bind=engine)

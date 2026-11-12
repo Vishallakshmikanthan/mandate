@@ -145,7 +145,9 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
             payee_email=counterparty_obj.paypal_email if counterparty_obj else None,
             payee_merchant_id=counterparty_obj.paypal_merchant_id if counterparty_obj else None,
             return_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?approved=true",
-            cancel_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?cancelled=true"
+            cancel_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?cancelled=true",
+            escrow_id=escrow.id,
+            db=db
         )
         escrow.paypal_order_id = order_res.get("order_id")
         db.commit()
