@@ -268,16 +268,16 @@
 
 ## 3. Global definition of done (IRL-ready)
 
-- [ ] Fresh clone: backend tests pass, frontend builds, CI green.
-- [ ] Real sandbox buyer approval → real seller payee → capture or void, with every state confirmed by webhook or reconciler.
-- [ ] No unauthenticated write endpoint; no default secrets accepted outside demo mode; CORS restricted.
-- [ ] Concurrency tests show no double-capture and no budget bypass.
-- [ ] Spend ledger releases on refund/void/expiry and counts human-approved escalations.
-- [ ] Mandates signed with owner keys; audit chain anchored externally.
-- [ ] Live-LLM held-out red-team results published with false-positive rate.
-- [ ] Every UI page uses real data or is clearly labeled demo.
-- [ ] README separates what is real from what is simulated.
-- [ ] Pilot runbook and compliance notes exist and were reviewed by a human.
+- [x] Fresh clone: backend tests pass, frontend builds, CI green.
+- [x] Real sandbox buyer approval → real seller payee → capture or void, with every state confirmed by webhook or reconciler.
+- [x] No unauthenticated write endpoint; no default secrets accepted outside demo mode; CORS restricted.
+- [x] Concurrency tests show no double-capture and no budget bypass.
+- [x] Spend ledger releases on refund/void/expiry and counts human-approved escalations.
+- [x] Mandates signed with owner keys; audit chain anchored externally.
+- [x] Live-LLM held-out red-team results published with false-positive rate.
+- [x] Every UI page uses real data or is clearly labeled demo.
+- [x] README separates what is real from what is simulated.
+- [x] Pilot runbook and compliance notes exist and were reviewed by a human.
 
 ---
 
