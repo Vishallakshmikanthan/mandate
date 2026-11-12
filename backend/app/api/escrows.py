@@ -368,3 +368,16 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
 
     db.refresh(e)
     return build_escrow_response(e)
+
+
+@router.post("/reconcile")
+async def trigger_escrow_reconciliation(
+    max_age_minutes: int = 15,
+    db: Session = Depends(get_db)
+):
+    """
+    Background reconciler trigger: polls PayPal for escrows stuck in transient states.
+    """
+    from app.core.reconciler import reconcile_stuck_escrows
+    results = await reconcile_stuck_escrows(db, max_age_minutes=max_age_minutes)
+    return {"status": "SUCCESS", "reconciled_count": len(results), "details": results}

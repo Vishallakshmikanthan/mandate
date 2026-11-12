@@ -11,6 +11,11 @@ from app.api import mandates, intents, escrows, scenarios, stream, audit, webhoo
 async def lifespan(app: FastAPI):
     # Startup: initialize database tables
     init_db()
+    if settings.APP_ENV == "prod":
+        from app.paypal.client import get_paypal_client
+        client = get_paypal_client()
+        if not client.simulation_mode and not settings.PAYPAL_WEBHOOK_ID:
+            raise ValueError("PAYPAL_WEBHOOK_ID must be configured in production (APP_ENV=prod) when not in simulation mode.")
     yield
     # Shutdown logic if needed
 

@@ -37,11 +37,16 @@ VALID_TRANSITIONS: Dict[str, Set[str]] = {
     },
     EscrowState.FUNDS_HELD.value: {
         EscrowState.DELIVERED.value,
+        EscrowState.RELEASED.value,
+        EscrowState.NEEDS_HUMAN.value,
         EscrowState.REFUNDED.value,
         EscrowState.EXPIRED.value,
     },
     EscrowState.DELIVERED.value: {
         EscrowState.UNDER_ARBITRATION.value,
+        EscrowState.RELEASED.value,
+        EscrowState.NEEDS_HUMAN.value,
+        EscrowState.REFUNDED.value,
         EscrowState.EXPIRED.value,
     },
     EscrowState.UNDER_ARBITRATION.value: {

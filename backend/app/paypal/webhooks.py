@@ -15,17 +15,24 @@ async def verify_paypal_webhook_signature(
 ) -> bool:
     """
     Verify incoming PayPal webhook signature using PayPal's verification endpoint.
-    If in simulation mode or unconfigured webhook ID, passes for testing purposes.
+    Fails closed: if not in simulation mode and PAYPAL_WEBHOOK_ID is unset,
+    never returns True.
     """
     client = get_paypal_client()
-    if client.simulation_mode or not settings.PAYPAL_WEBHOOK_ID:
+    if client.simulation_mode:
         return True
 
-    auth_algo = headers.get("paypal-auth-algo") or headers.get("PAYPAL-AUTH-ALGO")
-    cert_url = headers.get("paypal-cert-url") or headers.get("PAYPAL-CERT-URL")
-    transmission_id = headers.get("paypal-transmission-id") or headers.get("PAYPAL-TRANSMISSION-ID")
-    transmission_sig = headers.get("paypal-transmission-sig") or headers.get("PAYPAL-TRANSMISSION-SIG")
-    transmission_time = headers.get("paypal-transmission-time") or headers.get("PAYPAL-TRANSMISSION-TIME")
+    if not settings.PAYPAL_WEBHOOK_ID:
+        logger.error("PAYPAL_WEBHOOK_ID is unset and not in simulation mode. Rejecting webhook.")
+        return False
+
+    # Extract headers (case-insensitive lookup)
+    h_lower = {k.lower(): v for k, v in headers.items()}
+    auth_algo = h_lower.get("paypal-auth-algo")
+    cert_url = h_lower.get("paypal-cert-url")
+    transmission_id = h_lower.get("paypal-transmission-id")
+    transmission_sig = h_lower.get("paypal-transmission-sig")
+    transmission_time = h_lower.get("paypal-transmission-time")
 
     if not all([auth_algo, cert_url, transmission_id, transmission_sig, transmission_time]):
         logger.warning("Missing required PayPal webhook verification headers.")
@@ -51,20 +58,23 @@ async def verify_paypal_webhook_signature(
 
 def record_webhook_event(db: Session, event_id: str, event_type: str, payload: Dict[str, Any]) -> bool:
     """
-    Record webhook event and ensure strict deduplication.
-    Returns True if this is a new event, False if it was already processed.
+    Record webhook event and check deduplication.
+    Returns True if this event should be processed (new or retried from failed),
+    False if it was already successfully processed.
     """
     existing = db.query(WebhookEvent).filter(WebhookEvent.event_id == event_id).first()
-    if existing:
-        logger.info("Ignoring duplicate webhook event ID: %s", event_id)
+    if existing and existing.status == "PROCESSED":
+        logger.info("Ignoring already processed duplicate webhook event ID: %s", event_id)
         return False
 
-    new_event = WebhookEvent(
-        event_id=event_id,
-        type=event_type,
-        payload=payload,
-        processed_at=datetime.now(timezone.utc)
-    )
-    db.add(new_event)
-    db.commit()
+    if not existing:
+        new_event = WebhookEvent(
+            event_id=event_id,
+            type=event_type,
+            payload=payload,
+            status="RECEIVED"
+        )
+        db.add(new_event)
+        db.commit()
+
     return True
