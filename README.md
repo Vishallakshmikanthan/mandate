@@ -6,21 +6,44 @@
 
 **Hackathon:** Build What's Next with PayPal and AI (Devpost)  
 **Team:** VibeSync (Vishal & Sneha)  
-**Status:** IRL-Ready Platform • 101 Tests Passing • CI Hardened
+**Status:** IRL-Ready Platform • 101 Tests Passing • Live on Vercel • PayPal Sandbox Verified
 
-[![CI](https://github.com/Vishallakshmikanthan/mandate/actions/workflows/ci.yml/badge.svg)](https://github.com/Vishallakshmikanthan/mandate/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Next.js](https://img.shields.io/badge/Next.js-15+-black?logo=next.js&logoColor=white)](https://nextjs.org)
-[![PayPal](https://img.shields.io/badge/PayPal-Orders_v2_Escrow-003087?logo=paypal&logoColor=white)](https://developer.paypal.com)
-[![Test Suite](https://img.shields.io/badge/Tests-101%20Passed-success?logo=pytest&logoColor=white)](backend/tests)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-mandate--live.vercel.app-6366F1?style=for-the-badge&logo=vercel&logoColor=white)](https://mandate-live.vercel.app)
+[![CI](https://img.shields.io/badge/CI-Passing-success?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/Vishallakshmikanthan/mandate/actions)
+[![Test Suite](https://img.shields.io/badge/Tests-101%20Passed-success?style=for-the-badge&logo=pytest&logoColor=white)](backend/tests)
+[![PayPal](https://img.shields.io/badge/PayPal-Orders_v2_Escrow-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://developer.paypal.com)
+
+[**🌐 Live Application**](https://mandate-live.vercel.app) • [**⚡ Alternate Mirror**](https://mandate-irl.vercel.app) • [**📦 GitHub Repo**](https://github.com/Vishallakshmikanthan/mandate) • [**📬 Postman Collection**](postman/Mandate_API.postman_collection.json)
 
 ---
 
 > *"Agents can spend money. Mandate makes sure they can't spend it wrongly."*
 
 </div>
+
+---
+
+## 🚀 Live Demo & Testing Instructions (For Hackathon Judges)
+
+The platform is fully deployed and connected to the live PayPal Sandbox environment with real-time webhooks enabled.
+
+| Resource | URL / Credentials | Description |
+|---|---|---|
+| **Primary Live URL** | [https://mandate-live.vercel.app](https://mandate-live.vercel.app) | Production deployment on Vercel |
+| **Alternate Mirror** | [https://mandate-irl.vercel.app](https://mandate-irl.vercel.app) | Secondary custom alias |
+| **Demo Supervisor** | `supervisor@mandate.demo` / `Mandate2026!` | Click **"One-Click Demo Access"** on `/login` for instant bypass |
+| **System Admin** | `admin@mandate.dev` / `SecureAdminPassword123!` | Full administrative supervisor role |
+| **PayPal Sandbox Buyer** | `sb-mquol53750388@personal.example.com` / `Uimj3!sf` | Authentic PayPal Sandbox credentials for video demo & payment authorization (fake money) |
+| **Live Webhook URL** | `https://mandate-live.vercel.app/api/webhooks/paypal` | Webhook ID: `6BM615164A911034W` (Active & verified) |
+
+### 🧭 Quick 60-Second Walkthrough for Judges:
+1. Open [https://mandate-live.vercel.app/login](https://mandate-live.vercel.app/login).
+2. Click the shiny **"One-Click Demo Access"** button to jump straight into the supervisor cockpit.
+3. Head to **Live Scenarios** (`/app/scenarios`) to run:
+   - **Scenario A (Happy Path):** $120 Logo Pack &rarr; Gateway Approval &rarr; PayPal Order Authorize Hold &rarr; Deliverable PASS &rarr; Capture funds.
+   - **Scenario B (Prompt Injection Attack):** Malicious seller injection &rarr; Gateway Tighten-Only Risk Scorer Block &rarr; Zero PayPal API calls.
+   - **Scenario C (Delivery Dispute):** Blurry JPG delivery &rarr; AI Arbiter Contract Evaluation FAIL &rarr; PayPal Void &rarr; Immediate buyer refund.
+4. Check **Trust / Audit Log** (`/app/audit`) to verify the real-time Merkle-chained SHA-256 tamper-proof ledger.
 
 ---
 
