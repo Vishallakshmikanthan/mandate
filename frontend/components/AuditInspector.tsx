@@ -60,33 +60,35 @@ export const AuditInspector: React.FC = () => {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-[1400px] mx-auto py-4">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-white/[0.08] gap-4">
         <div>
-          <h2 className="text-lg font-black text-white flex items-center gap-2">
-            <LinkIcon className="w-5 h-5 text-blue-400" />
-            <span>Cryptographic Append-Only Audit Chain</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400">
+            Immutable Verification
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-normal tracking-tightest text-white mt-1">
+            Audit Hash Chain
           </h2>
-          <p className="text-xs text-slate-400">
-            Every transaction, policy decision, and arbitration verdict is linked into an immutable SHA-256 hash chain.
+          <p className="text-xs text-neutral-400 mt-1 max-w-xl">
+            Every transaction, policy decision, and arbitration verdict is cryptographically bound into an append-only SHA-256 hash chain.
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start">
+        <div className="flex items-center gap-3 self-start">
           <button
             onClick={fetchLogs}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 text-xs hover:bg-slate-800 transition-colors"
+            className="ref-circle-btn"
+            title="Refresh Ledger"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Refresh</span>
+            <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={handleVerify}
             disabled={verifying}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-bold shadow-lg shadow-emerald-500/20 hover:opacity-95 transition-all"
+            className="ref-pill-primary text-xs uppercase tracking-wider font-mono cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>{verifying ? "Verifying Chain..." : "Verify Chain Integrity"}</span>
+            <span>{verifying ? "Verifying Chain..." : "Verify Integrity"}</span>
           </button>
         </div>
       </div>
@@ -94,90 +96,97 @@ export const AuditInspector: React.FC = () => {
       {/* Verification Result Card */}
       {verification && (
         <div
-          className={`glass-panel rounded-2xl p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
-            verification.valid ? "border-emerald-500/40 glow-green" : "border-red-500/40 glow-red"
-          }`}
+          className={`ref-glass-card rounded-2xl p-6 border transition-all ${verification.valid ? "border-emerald-500/30" : "border-red-500/30"
+            }`}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                verification.valid
-                  ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
-                  : "bg-red-500/10 border border-red-500/30 text-red-400"
-              }`}
-            >
-              {verification.valid ? (
-                <CheckCircle2 className="w-5 h-5" />
-              ) : (
-                <ShieldAlert className="w-5 h-5" />
-              )}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${verification.valid
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                    : "bg-red-500/10 border-red-500/30 text-red-400"
+                  }`}
+              >
+                {verification.valid ? (
+                  <CheckCircle2 className="w-5 h-5" />
+                ) : (
+                  <ShieldAlert className="w-5 h-5" />
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-medium text-white">
+                    {verification.valid ? "CHAIN INTEGRITY VERIFIED" : "INTEGRITY COMPROMISED"}
+                  </span>
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-white/[0.04] border border-white/[0.08] text-neutral-300">
+                    {verification.total_records} Records
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-400 mt-1 font-sans">{verification.message}</p>
+              </div>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm text-slate-200">
-                  {verification.valid ? "Cryptographic Chain Verified Valid" : "Hash Chain Integrity Compromised"}
+
+            {verification.head_hash && (
+              <div className="text-left sm:text-right">
+                <span className="text-[10px] text-neutral-500 font-mono block uppercase">
+                  Head SHA-256
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-black/40 border border-white/10 text-slate-300">
-                  {verification.total_records} events
+                <span className="text-xs font-mono text-white">
+                  {verification.head_hash.slice(0, 24)}...
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">{verification.message}</p>
-            </div>
+            )}
           </div>
-
-          {verification.head_hash && (
-            <div className="text-right">
-              <span className="text-[10px] text-slate-500 font-mono block">Chain Head SHA-256:</span>
-              <span className="text-xs font-mono font-bold text-blue-400">
-                {verification.head_hash.slice(0, 20)}...
-              </span>
-            </div>
-          )}
         </div>
       )}
 
       {/* Audit Log Table */}
-      <div className="glass-panel rounded-2xl p-5 border border-slate-800">
-        <h3 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-3">
-          Chronological Hash-Linked Records
-        </h3>
+      <div className="ref-glass-card rounded-2xl p-6 sm:p-7 border border-white/[0.08]">
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/[0.06]">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-neutral-400">
+            Chronological Hash Ledger
+          </span>
+          <span className="text-[10px] font-mono text-neutral-500">
+            {logs.length} blocks
+          </span>
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-mono">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
-                <th className="pb-2 w-12">ID</th>
-                <th className="pb-2">Timestamp (UTC)</th>
-                <th className="pb-2">Actor</th>
-                <th className="pb-2">Event</th>
-                <th className="pb-2">Prev Hash</th>
-                <th className="pb-2">Node Hash</th>
+              <tr className="border-b border-white/[0.06] text-neutral-400 uppercase text-[10px]">
+                <th className="pb-3 w-12">ID</th>
+                <th className="pb-3">Timestamp (UTC)</th>
+                <th className="pb-3">Actor</th>
+                <th className="pb-3">Event</th>
+                <th className="pb-3">Prev Hash</th>
+                <th className="pb-3">Node Hash</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-white/[0.04]">
               {logs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-slate-500 font-sans">
+                  <td colSpan={6} className="py-8 text-center text-neutral-500 font-sans">
                     Audit log is currently empty.
                   </td>
                 </tr>
               ) : (
                 logs.map((log) => (
-                  <tr key={log.id} className="text-slate-300 hover:bg-slate-900/40">
-                    <td className="py-3 font-bold text-blue-400">#{log.id}</td>
-                    <td className="py-3 text-slate-400 text-[11px]">
+                  <tr key={log.id} className="text-neutral-300 hover:bg-white/[0.02] transition-colors">
+                    <td className="py-3 font-medium text-white">#{log.id}</td>
+                    <td className="py-3 text-neutral-400 text-[11px]">
                       {new Date(log.ts).toLocaleString()}
                     </td>
                     <td className="py-3">
-                      <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-[11px] text-cyan-300">
+                      <span className="px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-[10px] uppercase text-neutral-200">
                         {log.actor}
                       </span>
                     </td>
-                    <td className="py-3 font-semibold text-slate-200">{log.event}</td>
-                    <td className="py-3 text-[10px] text-slate-500 truncate max-w-[120px]">
+                    <td className="py-3 font-medium text-white">{log.event}</td>
+                    <td className="py-3 text-[10px] text-neutral-500 truncate max-w-[120px]">
                       {log.prev_hash.slice(0, 16)}...
                     </td>
-                    <td className="py-3 text-[10px] text-emerald-400 font-bold truncate max-w-[120px]">
+                    <td className="py-3 text-[10px] text-neutral-300 truncate max-w-[120px]">
                       {log.hash.slice(0, 16)}...
                     </td>
                   </tr>
