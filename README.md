@@ -6,7 +6,7 @@
 
 **Hackathon:** Build What's Next with PayPal and AI (Devpost)  
 **Team:** VibeSync (Vishal & Sneha)  
-**Status:** MVP Shipped • 100% Adversarial Block Rate (21/21) • 28 Tests Passing • CI Green
+**Status:** MVP Shipped • 34 Tests Passing • CI Green
 
 [![CI](https://github.com/Vishallakshmikanthan/mandate/actions/workflows/ci.yml/badge.svg)](https://github.com/Vishallakshmikanthan/mandate/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -14,8 +14,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-15+-black?logo=next.js&logoColor=white)](https://nextjs.org)
 [![PayPal](https://img.shields.io/badge/PayPal-Orders_v2_Escrow-003087?logo=paypal&logoColor=white)](https://developer.paypal.com)
-[![Test Suite](https://img.shields.io/badge/Tests-28%20Passed-success?logo=pytest&logoColor=white)](backend/tests)
-[![Red-Team Defense](https://img.shields.io/badge/Red--Team%20Block%20Rate-100.0%25-success)](scenarios/scenario_d_red_team_attacks.json)
+[![Test Suite](https://img.shields.io/badge/Tests-34%20Passed-success?logo=pytest&logoColor=white)](backend/tests)
 
 ---
 
@@ -34,6 +33,19 @@ Autonomous AI agents are increasingly entrusted with payment credentials to hire
 3. **No Immutable Auditability**: Black-box agent spending leaves human principals without forensic evidence or tamper-proof proof of transaction intent.
 
 **Most AI payment demos only show the happy path.** Mandate introduces a cryptographic financial firewall and AI-arbitrated escrow layer that sits between the agent and PayPal.
+
+---
+
+## 🔍 What is Simulated vs Real
+
+To ensure total architectural honesty:
+
+| Subsystem | What is Real | What is Simulated / Fallback |
+|---|---|---|
+| **PayPal Orders v2** | Real OAuth2 token generation, Orders v2 creation with `intent: AUTHORIZE`, Payments v2 capture/void, and webhook signature verification when sandbox credentials are supplied in `.env`. | When credentials are not provided or `PAYPAL_SIMULATION_MODE=true` is set, an internal mock transport handles API requests with deterministic request IDs and realistic latency for offline testing and CI. |
+| **LLM Risk Scorer & Arbiter** | Structured JSON generation using Google Gemini (`gemini-2.5-flash`), OpenAI (`gpt-4o-mini`), or Anthropic (`claude-3-5-sonnet`) with strict Pydantic contract parsing. | Built-in `MockLLMProvider` evaluates rule limits and regex injection patterns with 0ms latency for deterministic offline testing without API keys. |
+| **Dashboard & Persistence** | Real-time SSE timeline via `/api/stream`, full Next.js rewrites to the FastAPI REST backend, SQLite/PostgreSQL persistence. Clean databases display authentic empty states. | Pre-seeded sample data is only shown when `NEXT_PUBLIC_DEMO_MODE=true` is explicitly enabled, flagged with a visible demo banner. |
+| **Red-Team Suite** | Executes 21 distinct prompt injections against the live gateway firewall, recording real block rates and persisting runs to the `redteam_runs` database table. | The stats endpoint returns "No runs yet" until an actual stress test is performed. No statistics are pre-seeded or hardcoded. |
 
 ---
 
@@ -268,7 +280,7 @@ mandate/
 │   │   ├── agents/              # Buyer, seller, attacker, orchestrator
 │   │   ├── paypal/              # PayPal client, orders, webhooks
 │   │   └── llm/                 # LLM provider interface & prompts
-│   ├── tests/                   # 28 passing unit & integration tests
+│   ├── tests/                   # 34 passing unit & integration tests
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                    # Next.js 15 dashboard
