@@ -60,101 +60,122 @@ export const RedTeamView: React.FC = () => {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-[1400px] mx-auto py-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-white/[0.08] gap-4">
         <div>
-          <h2 className="text-lg font-black text-white flex items-center gap-2">
-            <Radio className="w-5 h-5 text-red-400" />
-            <span>Adversarial Red-Team Stress Suite (21 Attacks)</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400">
+            Adversarial Stress Suite
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-normal tracking-tightest text-white mt-1">
+            Red-Team Benchmark (21 Vectors)
           </h2>
-          <p className="text-xs text-slate-400">
-            Automated benchmark subjecting the Mandate Gateway to prompt injections, system update spoofs, and financial overrides.
+          <p className="text-xs text-neutral-400 mt-1 max-w-xl">
+            Automated benchmark subjecting the Mandate Gateway to adversarial prompt injections, system update spoofs, and financial overrides.
           </p>
         </div>
         <button
           onClick={handleRunSuite}
           disabled={running}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 text-white font-bold text-xs shadow-lg shadow-red-600/30 hover:opacity-95 transition-all self-start"
+          className="ref-pill-primary text-xs uppercase tracking-wider font-mono cursor-pointer self-start"
         >
-          <Play className="w-4 h-4 fill-white" />
-          <span>{running ? "Executing 21 Attacks..." : "Run Adversarial Stress Test"}</span>
+          {running ? (
+            <span className="inline-block animate-spin mr-1">○</span>
+          ) : (
+            <Play className="w-3.5 h-3.5 fill-current" />
+          )}
+          <span>{running ? "Executing 21 Vectors..." : "Run Stress Test"}</span>
         </button>
       </div>
 
-      {/* Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="glass-panel rounded-2xl p-4 border border-slate-800 text-center">
-          <span className="text-[10px] text-slate-400 uppercase font-mono block">Attacks Tested</span>
-          <span className="text-2xl font-black text-white font-mono mt-1 block">
+      {/* Metric Cards matching Swiss minimalist layout */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="ref-glass-card rounded-2xl p-6 border border-white/[0.08]">
+          <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
+            Attacks Tested
+          </span>
+          <span className="text-3xl sm:text-4xl font-light text-white tracking-tight mt-2 block font-mono">
             {stats ? stats.total_attempted : 21}
           </span>
         </div>
-        <div className="glass-panel rounded-2xl p-4 border border-red-500/30 text-center bg-red-950/10">
-          <span className="text-[10px] text-red-400 uppercase font-mono block">Attacks Blocked</span>
-          <span className="text-2xl font-black text-red-400 font-mono mt-1 block">
+        <div className="ref-glass-card rounded-2xl p-6 border border-white/[0.08]">
+          <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
+            Attacks Blocked
+          </span>
+          <span className="text-3xl sm:text-4xl font-light text-red-400 tracking-tight mt-2 block font-mono">
             {stats ? stats.total_blocked : 21}
           </span>
         </div>
-        <div className="glass-panel rounded-2xl p-4 border border-emerald-500/30 text-center bg-emerald-950/10">
-          <span className="text-[10px] text-emerald-400 uppercase font-mono block">Firewall Block Rate</span>
-          <span className="text-2xl font-black text-emerald-400 font-mono mt-1 block">
+        <div className="ref-glass-card rounded-2xl p-6 border border-white/[0.08]">
+          <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
+            Firewall Block Rate
+          </span>
+          <span className="text-3xl sm:text-4xl font-light text-emerald-400 tracking-tight mt-2 block font-mono">
             {stats ? stats.block_rate_pct.toFixed(1) : "100.0"}%
           </span>
         </div>
-        <div className="glass-panel rounded-2xl p-4 border border-slate-800 text-center">
-          <span className="text-[10px] text-slate-400 uppercase font-mono block">Funds Lost</span>
-          <span className="text-2xl font-black text-emerald-400 font-mono mt-1 block">$0.00</span>
+        <div className="ref-glass-card rounded-2xl p-6 border border-white/[0.08]">
+          <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
+            Funds Compromised
+          </span>
+          <span className="text-3xl sm:text-4xl font-light text-white tracking-tight mt-2 block font-mono">
+            $0.00
+          </span>
         </div>
       </div>
 
       {/* Attacks List */}
-      <div className="glass-panel rounded-2xl p-5 border border-slate-800">
-        <h3 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-3">
-          Detailed Attack Vector Forensics
-        </h3>
+      <div className="ref-glass-card rounded-2xl p-6 sm:p-7 border border-white/[0.08]">
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/[0.06]">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-neutral-400">
+            Adversarial Vector Forensics
+          </span>
+          <span className="text-[10px] font-mono text-neutral-500">
+            {stats?.results ? stats.results.length : 21} attacks logged
+          </span>
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px] font-mono">
-                <th className="pb-2 w-16">ID</th>
-                <th className="pb-2">Attack Name</th>
-                <th className="pb-2">Vector Category</th>
-                <th className="pb-2">Gateway Verdict</th>
-                <th className="pb-2">Threat Score</th>
-                <th className="pb-2">Defense Reason</th>
+              <tr className="border-b border-white/[0.06] text-neutral-400 uppercase text-[10px] font-mono">
+                <th className="pb-3 w-16">ID</th>
+                <th className="pb-3">Attack Name</th>
+                <th className="pb-3">Vector Category</th>
+                <th className="pb-3">Gateway Verdict</th>
+                <th className="pb-3">Threat Index</th>
+                <th className="pb-3">Defense Reason</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-sans">
+            <tbody className="divide-y divide-white/[0.04]">
               {stats?.results && stats.results.length > 0 ? (
                 stats.results.map((atk) => (
-                  <tr key={atk.id} className="text-slate-300 hover:bg-slate-900/40">
-                    <td className="py-3 font-mono font-bold text-red-400">{atk.id}</td>
-                    <td className="py-3 font-medium text-slate-200">{atk.name}</td>
+                  <tr key={atk.id} className="text-neutral-300 hover:bg-white/[0.02] transition-colors">
+                    <td className="py-3 font-mono font-medium text-white">{atk.id}</td>
+                    <td className="py-3 font-medium text-neutral-200">{atk.name}</td>
                     <td className="py-3">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 border border-slate-700 text-slate-300">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/[0.04] border border-white/[0.08] text-neutral-300">
                         {atk.category}
                       </span>
                     </td>
                     <td className="py-3">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-red-500/10 text-red-400 border border-red-500/30">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-red-500/10 text-red-400 border border-red-500/30">
                         <ShieldX className="w-3 h-3" />
                         {atk.verdict}
                       </span>
                     </td>
-                    <td className="py-3 font-mono text-red-400 font-bold">
+                    <td className="py-3 font-mono text-white font-medium">
                       {(atk.risk_score * 100).toFixed(0)}%
                     </td>
-                    <td className="py-3 text-[11px] text-slate-400 max-w-xs truncate">
+                    <td className="py-3 text-[11px] text-neutral-400 max-w-xs truncate font-sans">
                       {atk.reason}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-slate-500">
-                    Click 'Run Adversarial Stress Test' to execute the suite.
+                  <td colSpan={6} className="py-8 text-center text-neutral-500 font-sans">
+                    Click 'Run Stress Test' to execute the adversarial suite.
                   </td>
                 </tr>
               )}
