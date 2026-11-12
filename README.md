@@ -47,6 +47,70 @@ The platform is fully deployed and connected to the live PayPal Sandbox environm
 
 ---
 
+## 📸 Product Showcase & Visual Tour
+
+A visual walkthrough of the Mandate platform in action, demonstrating the supervisor cockpit, live multi-agent simulation scenarios, cryptographic policy authoring, PayPal Orders v2 escrow settlement, and tamper-proof audit trails.
+
+### 1. Landing & Supervisor Authentication
+
+| Landing Hero & Value Proposition | One-Click Demo Access Cockpit |
+|---|---|
+| ![Landing Hero](product-ss/01_landing_hero.png) | ![Login Screen](product-ss/02_login_authentication.png) |
+| Dark-mode glassmorphic interface highlighting the core mission: *"Agents can spend money. Mandate makes sure they can't spend it wrongly."* | Seamless supervisor authentication with one-click sandbox bypass and quick-fill demo credentials. |
+
+---
+
+### 2. Live Scenarios & Real-Time Threat Defense
+
+| Command Center & Overview | Scenario A: Happy Path ($120.00) |
+|---|---|
+| ![Live Scenarios](product-ss/03_live_scenarios_overview.png) | ![Scenario A](product-ss/04_scenario_a_happy_path_authorized.png) |
+| Live multi-agent simulation suite with real-time SSE stream, decision pipeline, and money flow gauges. | Full 7-stage escrow lifecycle completed: Gateway approval &rarr; PayPal hold authorized &rarr; Deliverables inspected &rarr; Captured. |
+
+| Scenario B: Prompt Injection Stopped Cold | Scenario C: Substandard Delivery Dispute |
+|---|---|
+| ![Scenario B](product-ss/05_scenario_b_injection_blocked.png) | ![Scenario C](product-ss/06_scenario_c_delivery_dispute_refunded.png) |
+| Malicious seller injection (`$900 override`) blocked immediately by the Tighten-Only Risk Scorer with **zero PayPal API calls**. | Low-res deliverable fails AI Arbiter evaluation; PayPal hold automatically voided and buyer 100% refunded. |
+
+---
+
+### 3. Agent & Mandate Policy Governance
+
+| Enrolled Agent Registry | Buyer Agent Detail & Telemetry |
+|---|---|
+| ![Agent Registry](product-ss/07_agent_registry.png) | ![Agent Detail](product-ss/08_agent_detail_dashboard.png) |
+| Catalog of autonomous buyer and seller agents enrolled under cryptographic spending policies and tracking spend limits. | Deep-dive telemetry for Buyer Agent Alpha showing transaction count, policy bindings, and execution logs. |
+
+| Active Mandate Spending Policies | 5-Step Policy Creation Wizard |
+|---|---|
+| ![Mandates Overview](product-ss/09_mandate_policies_overview.png) | ![Mandate Creation](product-ss/10_mandate_creation_wizard.png) |
+| Active policies showing lifetime budget caps, rolling 24-hour daily limits, and per-transaction thresholds. | Intuitive wizard to configure allowed/blocked counterparties, merchant categories, velocity limits, and live canonical JSON. |
+
+---
+
+### 4. Payments, Escrow & Cryptographic Audit
+
+| Evaluated Payment Transactions | PayPal Orders v2 Escrow Settlements |
+|---|---|
+| ![Payment Transactions](product-ss/11_payment_transactions_ledger.png) | ![Escrow Settlements](product-ss/12_escrow_settlements_paypal.png) |
+| Comprehensive transaction history displaying 10-rule verification ledger, risk percentages, and linked escrows. | Real-time state machine tracking RELEASED, REFUNDED, and BLOCKED escrows linked to PayPal Sandbox Orders. |
+
+| AI Arbiter Escrow Inspection Detail | Tamper-Proof SHA-256 Audit Chain |
+|---|---|
+| ![Escrow Detail](product-ss/13_escrow_detail_ai_arbiter.png) | ![Audit Log](product-ss/14_cryptographic_audit_log.png) |
+| Detailed inspection view showing PayPal Order ID, hold expiration countdown, and AI Arbiter PASS breakdown (98% confidence). | Append-only, SHA-256 Merkle hash-chained ledger verifying complete cryptographic integrity across all gateway events. |
+
+---
+
+### 5. Developer Experience & Pricing
+
+| Connect Any Agent in 2 Minutes | Transparent Platform Pricing |
+|---|---|
+| ![Developer Quickstart](product-ss/15_developer_quickstart.png) | ![Pricing Plans](product-ss/16_pricing_plans.png) |
+| 2-minute SDK integration with Python and LangChain code snippets to gate any agent checkout before reaching PayPal. | Transparent tier pricing from Starter (Free Sandbox) to Growth ($49/mo) and Enterprise ($249/mo). |
+
+---
+
 ## 📌 Executive Summary & Problem
 
 Autonomous AI agents are increasingly entrusted with payment credentials to hire freelancers, subscribe to cloud APIs, and purchase services. However, giving an LLM direct wallet access creates fatal vulnerabilities:
