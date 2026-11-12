@@ -84,3 +84,22 @@ def test_mandate_crud_and_killswitch(client, sample_policy):
     })
     assert intent_resp.status_code == 201
     assert intent_resp.json()["decision"] == "BLOCKED"
+
+
+def test_red_team_stats_empty_on_fresh_db(client):
+    resp = client.get("/api/scenarios/redteam/stats")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "not_run_yet"
+    assert data["total_attempted"] == 0
+    assert data["last_run"] is None
+
+    # Now run suite and verify stats reflect the run
+    run_resp = client.post("/api/scenarios/red_team/run")
+    assert run_resp.status_code == 200
+    after_resp = client.get("/api/scenarios/redteam/stats")
+    assert after_resp.status_code == 200
+    after_data = after_resp.json()
+    assert after_data["status"] == "completed"
+    assert after_data["total_attempted"] == 21
+    assert after_data["last_run"] is not None

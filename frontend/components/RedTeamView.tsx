@@ -94,32 +94,32 @@ export const RedTeamView: React.FC = () => {
           <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
             Attacks Tested
           </span>
-          <span className="text-3xl sm:text-4xl font-light text-white tracking-tight mt-2 block font-mono">
-            {stats ? stats.total_attempted : 21}
+          <span className="text-2xl sm:text-3xl font-light text-white tracking-tight mt-2 block font-mono">
+            {stats?.last_run ? stats.total_attempted : "No runs yet"}
           </span>
         </div>
         <div className="ref-glass-card rounded-2xl p-6 border border-white/[0.08]">
           <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
             Attacks Blocked
           </span>
-          <span className="text-3xl sm:text-4xl font-light text-red-400 tracking-tight mt-2 block font-mono">
-            {stats ? stats.total_blocked : 21}
+          <span className="text-2xl sm:text-3xl font-light text-red-400 tracking-tight mt-2 block font-mono">
+            {stats?.last_run ? stats.total_blocked : "—"}
           </span>
         </div>
         <div className="ref-glass-card rounded-2xl p-6 border border-white/[0.08]">
           <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
             Firewall Block Rate
           </span>
-          <span className="text-3xl sm:text-4xl font-light text-emerald-400 tracking-tight mt-2 block font-mono">
-            {stats ? stats.block_rate_pct.toFixed(1) : "100.0"}%
+          <span className="text-2xl sm:text-3xl font-light text-emerald-400 tracking-tight mt-2 block font-mono">
+            {stats?.last_run ? `${stats.block_rate_pct.toFixed(1)}%` : "—"}
           </span>
         </div>
         <div className="ref-glass-card rounded-2xl p-6 border border-white/[0.08]">
           <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
             Funds Compromised
           </span>
-          <span className="text-3xl sm:text-4xl font-light text-white tracking-tight mt-2 block font-mono">
-            $0.00
+          <span className="text-2xl sm:text-3xl font-light text-white tracking-tight mt-2 block font-mono">
+            {stats?.last_run ? "$0.00" : "—"}
           </span>
         </div>
       </div>
@@ -131,7 +131,7 @@ export const RedTeamView: React.FC = () => {
             Adversarial Vector Forensics
           </span>
           <span className="text-[10px] font-mono text-neutral-500">
-            {stats?.results ? stats.results.length : 21} attacks logged
+            {stats?.last_run && stats.results ? `${stats.results.length} attacks logged` : "No runs yet"}
           </span>
         </div>
 
@@ -148,7 +148,7 @@ export const RedTeamView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04]">
-              {stats?.results && stats.results.length > 0 ? (
+              {stats?.last_run && stats.results && stats.results.length > 0 ? (
                 stats.results.map((atk) => (
                   <tr key={atk.id} className="text-neutral-300 hover:bg-white/[0.02] transition-colors">
                     <td className="py-3 font-mono font-medium text-white">{atk.id}</td>
@@ -175,7 +175,7 @@ export const RedTeamView: React.FC = () => {
               ) : (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-neutral-500 font-sans">
-                    Click 'Run Stress Test' to execute the adversarial suite.
+                    No runs yet. Click &apos;Run Stress Test&apos; to execute the adversarial suite.
                   </td>
                 </tr>
               )}

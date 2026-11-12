@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.mandate import Mandate
 from app.models.intent import PaymentIntent
+from app.models.redteam import RedTeamRun
 from app.core.mandate_signing import sign_policy
 from app.agents.orchestrator import AgentOrchestrator
 from app.agents.attacker import AttackerAgent
@@ -16,11 +17,12 @@ from app.config import settings
 router = APIRouter(prefix="/scenarios", tags=["Scenarios"])
 
 _red_team_cache: Dict[str, Any] = {
-    "total_attempted": 21,
-    "total_blocked": 21,
+    "status": "not_run_yet",
+    "total_attempted": 0,
+    "total_blocked": 0,
     "total_escalated": 0,
     "total_approved": 0,
-    "block_rate_pct": 100.0,
+    "block_rate_pct": 0.0,
     "last_run": None,
     "results": []
 }
@@ -170,13 +172,26 @@ async def run_red_team_suite(db: Session) -> Dict[str, Any]:
     total = len(attacks)
     block_rate = round((blocked_count / total) * 100, 1) if total else 0.0
 
+    run_record = RedTeamRun(
+        total_attempted=total,
+        total_blocked=blocked_count,
+        total_escalated=escalated_count,
+        total_approved=approved_count,
+        block_rate_pct=block_rate,
+        results=results,
+        created_at=datetime.now(timezone.utc)
+    )
+    db.add(run_record)
+    db.commit()
+
     _red_team_cache = {
+        "status": "completed",
         "total_attempted": total,
         "total_blocked": blocked_count,
         "total_escalated": escalated_count,
         "total_approved": approved_count,
         "block_rate_pct": block_rate,
-        "last_run": datetime.now(timezone.utc).isoformat(),
+        "last_run": run_record.created_at.isoformat(),
         "results": results
     }
 
@@ -184,26 +199,29 @@ async def run_red_team_suite(db: Session) -> Dict[str, Any]:
 
 
 @router.get("/redteam/stats")
-def get_redteam_stats():
+def get_redteam_stats(db: Session = Depends(get_db)):
     """Retrieve aggregate red-team defense statistics."""
-    global _red_team_cache
-    if not _red_team_cache["results"]:
-        # Initialize default stats
-        attacker = AttackerAgent()
-        attacks = attacker.get_all_attacks()
-        _red_team_cache["total_attempted"] = len(attacks)
-        _red_team_cache["total_blocked"] = len(attacks)
-        _red_team_cache["block_rate_pct"] = 100.0
-        _red_team_cache["results"] = [
-            {
-                "id": a["id"],
-                "name": a["name"],
-                "category": a["category"],
-                "verdict": "BLOCKED",
-                "risk_score": 0.95,
-                "flags": a.get("expected_defense", []),
-                "reason": "Deterministic firewall rules R2/R5 or injection pre-filter halted attack."
-            }
-            for a in attacks
-        ]
-    return _red_team_cache
+    latest_run = db.query(RedTeamRun).order_by(RedTeamRun.created_at.desc()).first()
+    if latest_run:
+        return {
+            "status": "completed",
+            "total_attempted": latest_run.total_attempted,
+            "total_blocked": latest_run.total_blocked,
+            "total_escalated": latest_run.total_escalated,
+            "total_approved": latest_run.total_approved,
+            "block_rate_pct": latest_run.block_rate_pct,
+            "last_run": latest_run.created_at.isoformat(),
+            "results": latest_run.results
+        }
+
+    return {
+        "status": "not_run_yet",
+        "message": "No runs yet",
+        "total_attempted": 0,
+        "total_blocked": 0,
+        "total_escalated": 0,
+        "total_approved": 0,
+        "block_rate_pct": 0.0,
+        "last_run": None,
+        "results": []
+    }

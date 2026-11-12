@@ -46,5 +46,6 @@ def init_db():
     from app.models.arbiter import ArbiterVerdictRecord
     from app.models.audit import AuditLog
     from app.models.webhook import WebhookEvent
+    from app.models.redteam import RedTeamRun
 
     Base.metadata.create_all(bind=engine)
