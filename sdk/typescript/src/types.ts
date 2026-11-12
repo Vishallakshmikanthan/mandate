@@ -68,3 +68,4 @@ export interface MandateClientOptions {
   baseUrl?: string;
   timeoutMs?: number;
 }
+

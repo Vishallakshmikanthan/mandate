@@ -60,3 +60,4 @@ runAgentCommerce();
 | `client.getIntentStatus(intentId)` | Fetches intent decision, approval status, and escrow contract ID. |
 | `client.getMandateBalance(mandateId)` | Returns allocated spend, remaining treasury budget, and velocity limits. |
 | `client.submitDeliverable(escrowId, params)` | Seller agent submits work proofs/hashes for automated AI arbitration. |
+

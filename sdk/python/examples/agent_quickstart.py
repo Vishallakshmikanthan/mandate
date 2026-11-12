@@ -19,3 +19,4 @@ try:
     print(f"Payment {payment.decision}! Escrow order: {payment.escrow_id}")
 except IntentBlockedError as err:
     print(f"Payment BLOCKED by Mandate Firewall: {err.reasons}")
+

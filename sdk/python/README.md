@@ -56,3 +56,4 @@ except IntentBlockedError as err:
 | `client.get_intent_status(intent_id)` | Fetches intent decision, approval status, and escrow contract ID. |
 | `client.get_mandate_balance(mandate_id)` | Returns allocated spend, remaining treasury budget, and velocity limits. |
 | `client.submit_deliverable(escrow_id, ...)` | Seller agent submits work proofs/hashes for automated AI arbitration. |
+

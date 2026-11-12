@@ -47,3 +47,4 @@ export MANDATE_BASE_URL="http://localhost:8000"
 export MANDATE_API_KEY="mnd_agent_alpha_key"
 python -m mcp.server
 ```
+

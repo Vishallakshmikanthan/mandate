@@ -154,3 +154,4 @@ curl -X POST https://api.mandate.example.com/api/mandates/mnd_freelance_2026/rev
 | **Audit Verification Rate** | **100.0%** | Continuous hash-chain integrity check (`GET /api/audit/verify`) |
 | **P95 Decision Latency** | **< 800ms** | Telemetry access logs (`X-Response-Time-Ms`) |
 | **Human Escalation SLA** | **< 4 hours** | Time from `ESCALATED` intent to human review in `/app/approvals` |
+

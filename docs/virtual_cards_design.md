@@ -134,3 +134,4 @@ Prior to implementing or testing virtual cards with live capital:
 1. **Phase 1 (Current):** Focus strictly on **PayPal Auth & Capture** for vetted marketplaces and counterparty agents.
 2. **Phase 2 (Design & Sandbox Evaluation):** Implement sandbox JIT authorization webhook listener with mock card issuing payloads in test harness.
 3. **Phase 3 (Pilot Onboarding):** Following regulatory memorandum, launch restricted pilot for cloud infrastructure SaaS spend only (AWS/GCP) with $100 single-use limits.
+

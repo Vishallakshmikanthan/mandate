@@ -41,3 +41,4 @@ export class ResourceNotFoundError extends MandateError {
     this.name = "ResourceNotFoundError";
   }
 }
+
