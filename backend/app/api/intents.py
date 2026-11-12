@@ -138,14 +138,16 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
         db.refresh(escrow)
         escrow_id = escrow.id
 
-        # Create PayPal Order with intent: AUTHORIZE and seller payee routing
+        # Create PayPal Order with intent: AUTHORIZE, seller payee routing, and return URLs
         order_res = await create_paypal_order(
             intent_id=intent.id,
             amount_minor=req.amount_minor,
             currency=req.currency,
             description=req.description,
             payee_email=counterparty_obj.paypal_email if counterparty_obj else None,
-            payee_merchant_id=counterparty_obj.paypal_merchant_id if counterparty_obj else None
+            payee_merchant_id=counterparty_obj.paypal_merchant_id if counterparty_obj else None,
+            return_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?approved=true",
+            cancel_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?cancelled=true"
         )
         escrow.paypal_order_id = order_res.get("order_id")
         db.commit()

@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 from app.paypal.client import get_paypal_client
+from app.config import settings
 
 
 async def create_paypal_order(
@@ -10,18 +11,24 @@ async def create_paypal_order(
     currency: str = "USD",
     description: str = "Mandate AI Agent Service Escrow",
     payee_email: Optional[str] = None,
-    payee_merchant_id: Optional[str] = None
+    payee_merchant_id: Optional[str] = None,
+    return_url: Optional[str] = None,
+    cancel_url: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Create a PayPal order with intent: AUTHORIZE.
     Funds are held in escrow and not captured immediately.
     Sets payee on the purchase unit if counterparty payee details are provided.
+    Sets experience_context in payment_source.paypal for return and cancel URLs.
     """
     payee_dict: Dict[str, str] = {}
     if payee_email:
         payee_dict["email_address"] = payee_email
     if payee_merchant_id:
         payee_dict["merchant_id"] = payee_merchant_id
+
+    effective_return_url = return_url or f"{settings.FRONTEND_ORIGIN}/app/escrows"
+    effective_cancel_url = cancel_url or f"{settings.FRONTEND_ORIGIN}/app/escrows"
 
     client = get_paypal_client()
     if client.simulation_mode:
@@ -32,7 +39,9 @@ async def create_paypal_order(
             "approve_url": f"https://www.sandbox.paypal.com/checkoutnow?token={order_id}",
             "amount_minor": amount_minor,
             "currency": currency,
-            "payee": payee_dict if payee_dict else None
+            "payee": payee_dict if payee_dict else None,
+            "return_url": effective_return_url,
+            "cancel_url": effective_cancel_url
         }
 
     amount_str = f"{amount_minor / 100:.2f}"
@@ -47,9 +56,23 @@ async def create_paypal_order(
     if payee_dict:
         purchase_unit["payee"] = payee_dict
 
+    experience_context = {
+        "brand_name": "Mandate Escrow",
+        "locale": "en-US",
+        "shipping_preference": "NO_SHIPPING",
+        "user_action": "CONTINUE",
+        "return_url": effective_return_url,
+        "cancel_url": effective_cancel_url
+    }
+
     payload = {
         "intent": "AUTHORIZE",
-        "purchase_units": [purchase_unit]
+        "purchase_units": [purchase_unit],
+        "payment_source": {
+            "paypal": {
+                "experience_context": experience_context
+            }
+        }
     }
     idempotency_key = f"{intent_id}-CREATE"
     resp = await client.request("POST", "/v2/checkout/orders", json_data=payload, idempotency_key=idempotency_key)
@@ -67,7 +90,9 @@ async def create_paypal_order(
         "approve_url": approve_url or f"https://www.sandbox.paypal.com/checkoutnow?token={order_id}",
         "amount_minor": amount_minor,
         "currency": currency,
-        "payee": payee_dict if payee_dict else None
+        "payee": payee_dict if payee_dict else None,
+        "return_url": effective_return_url,
+        "cancel_url": effective_cancel_url
     }
 
 

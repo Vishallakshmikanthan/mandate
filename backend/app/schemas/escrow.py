@@ -77,6 +77,7 @@ class EscrowResponse(BaseModel):
     paypal_order_id: Optional[str] = None
     paypal_authorization_id: Optional[str] = None
     paypal_capture_id: Optional[str] = None
+    approve_url: Optional[str] = None
     state: str
     spec: Dict[str, Any] = Field(default_factory=dict)
     hold_expires_at: Optional[datetime] = None

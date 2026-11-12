@@ -182,6 +182,15 @@ export async function humanDecisionEscrow(escrowId: string, action: string, note
   return await res.json();
 }
 
+export async function approvalReturnEscrow(escrowId: string): Promise<any> {
+  const res = await fetch(`${getApiBase()}/api/escrows/${escrowId}/approval-return`, { method: "GET" });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errData.detail || "Approval return verification failed");
+  }
+  return await res.json();
+}
+
 export async function fetchAuditLogs(): Promise<AuditRecord[]> {
   try {
     const res = await fetch(`${getApiBase()}/api/audit`, { cache: "no-store" });

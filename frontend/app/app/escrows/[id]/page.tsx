@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { fetchEscrow, arbitrateEscrow, humanDecisionEscrow, subscribeToStream } from "@/lib/api";
+import { fetchEscrow, arbitrateEscrow, humanDecisionEscrow, approvalReturnEscrow, subscribeToStream } from "@/lib/api";
 import { EscrowItem } from "@/lib/demo-store";
 import { formatMoney } from "@/lib/money";
 
@@ -13,6 +13,7 @@ export default function EscrowDetailPage() {
   const [escrow, setEscrow] = useState<EscrowItem | any>(null);
   const [loading, setLoading] = useState(true);
   const [isArbitrating, setIsArbitrating] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const steps = [
@@ -60,8 +61,31 @@ export default function EscrowDetailPage() {
     const unsub = subscribeToStream(() => {
       loadEscrow();
     });
+
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get("approved") === "true" || searchParams.has("token")) {
+        handleCompleteApproval();
+      }
+    }
+
     return unsub;
   }, [escrowId]);
+
+  const handleCompleteApproval = async () => {
+    if (!escrowId) return;
+    setIsApproving(true);
+    setActionMessage(null);
+    try {
+      const res = await approvalReturnEscrow(escrowId);
+      setEscrow((prev: any) => ({ ...prev, ...res }));
+      setActionMessage("Buyer approval verified. Funds are now held in escrow (FUNDS_HELD).");
+    } catch (err: any) {
+      setActionMessage(`Approval verification: ${err.message}`);
+    } finally {
+      setIsApproving(false);
+    }
+  };
 
   const handleRunArbiter = async () => {
     if (!escrowId) return;
@@ -174,6 +198,38 @@ export default function EscrowDetailPage() {
       {actionMessage && (
         <div className="p-3 rounded-xl bg-white/[0.06] border border-white/[0.1] text-xs font-mono text-cyan-300">
           {actionMessage}
+        </div>
+      )}
+
+      {/* Waiting for Buyer Approval Banner */}
+      {(escrow.state === "ORDER_CREATED" || escrow.state === "BUYER_APPROVED") && (
+        <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+              <h3 className="text-sm font-medium text-amber-200">Waiting for buyer approval</h3>
+            </div>
+            <p className="text-xs text-neutral-300">
+              The PayPal authorization order has been created. A human buyer must review and approve the hold.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <a
+              href={escrow.approve_url || `https://www.sandbox.paypal.com/checkoutnow?token=${escrow.paypal_order_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 sm:flex-initial text-center px-4 py-2 rounded-full text-xs font-semibold bg-amber-400 text-neutral-950 hover:bg-amber-300 transition shadow-sm"
+            >
+              Approve on PayPal ↗
+            </a>
+            <button
+              onClick={handleCompleteApproval}
+              disabled={isApproving}
+              className="flex-1 sm:flex-initial px-4 py-2 rounded-full text-xs font-medium bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/[0.15] transition"
+            >
+              {isApproving ? "Checking..." : "Confirm approved"}
+            </button>
+          </div>
         </div>
       )}
 

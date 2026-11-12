@@ -1,7 +1,10 @@
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from app.db import get_db
+from app.config import settings
 from app.models.escrow import Escrow
 from app.models.deliverable import Deliverable
 from app.models.arbiter import ArbiterVerdictRecord
@@ -22,18 +25,25 @@ from app.paypal.orders import (
     capture_paypal_authorization,
     void_paypal_authorization
 )
+from app.paypal.client import get_paypal_client
 from app.core.stream_broadcaster import emit_timeline_event
 
 router = APIRouter(prefix="/escrows", tags=["Escrows"])
 
 
 def build_escrow_response(e: Escrow) -> EscrowResponse:
+    approve_url = (
+        f"https://www.sandbox.paypal.com/checkoutnow?token={e.paypal_order_id}"
+        if e.paypal_order_id and e.state in ("ORDER_CREATED", "BUYER_APPROVED")
+        else None
+    )
     return EscrowResponse(
         id=e.id,
         intent_id=e.intent_id,
         paypal_order_id=e.paypal_order_id,
         paypal_authorization_id=e.paypal_authorization_id,
         paypal_capture_id=e.paypal_capture_id,
+        approve_url=approve_url,
         state=e.state,
         spec=e.spec or {},
         hold_expires_at=e.hold_expires_at,
@@ -69,6 +79,86 @@ def get_escrow(escrow_id: str, db: Session = Depends(get_db)):
     if not e:
         raise HTTPException(status_code=404, detail="Escrow contract not found")
     return build_escrow_response(e)
+
+
+@router.get("/{escrow_id}/approval-return", response_model=EscrowResponse)
+async def handle_approval_return(
+    escrow_id: str,
+    token: Optional[str] = None,
+    PayerID: Optional[str] = None,
+    redirect: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Callback when buyer returns from PayPal approval.
+    Fetches the order from PayPal, requires status APPROVED,
+    calls authorize, persists authorization_id and hold_expires_at,
+    and transitions the escrow to FUNDS_HELD.
+    """
+    escrow = db.query(Escrow).filter(Escrow.id == escrow_id).first()
+    if not escrow:
+        raise HTTPException(status_code=404, detail="Escrow contract not found")
+
+    if not escrow.paypal_order_id:
+        raise HTTPException(status_code=400, detail="Escrow has no associated PayPal order ID")
+
+    # If already at FUNDS_HELD or beyond, return current state
+    if escrow.state in (
+        EscrowState.FUNDS_HELD.value,
+        EscrowState.DELIVERED.value,
+        EscrowState.UNDER_ARBITRATION.value,
+        EscrowState.RELEASED.value,
+        EscrowState.PARTIALLY_RELEASED.value,
+        EscrowState.REFUNDED.value
+    ):
+        if redirect:
+            return RedirectResponse(url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}")
+        return build_escrow_response(escrow)
+
+    client = get_paypal_client()
+    if not client.simulation_mode:
+        # Fetch order from PayPal to verify approval
+        order_data = await client.request("GET", f"/v2/checkout/orders/{escrow.paypal_order_id}")
+        order_status = order_data.get("status")
+        if order_status != "APPROVED":
+            raise HTTPException(
+                status_code=400,
+                detail=f"PayPal order is not approved (status: {order_status}). Expected 'APPROVED'."
+            )
+
+    # 1. Transition to BUYER_APPROVED
+    await transition_escrow_state(
+        db=db,
+        escrow=escrow,
+        new_state=EscrowState.BUYER_APPROVED.value,
+        actor="buyer",
+        reason="Buyer completed approval on PayPal."
+    )
+
+    # 2. Call PayPal authorize
+    auth_res = await authorize_paypal_order(order_id=escrow.paypal_order_id, intent_id=escrow.intent_id)
+    escrow.paypal_authorization_id = auth_res["authorization_id"]
+    if auth_res.get("hold_expires_at"):
+        try:
+            exp_str = auth_res["hold_expires_at"].replace("Z", "+00:00")
+            escrow.hold_expires_at = datetime.fromisoformat(exp_str)
+        except Exception:
+            pass
+    db.commit()
+
+    # 3. Transition to FUNDS_HELD
+    await transition_escrow_state(
+        db=db,
+        escrow=escrow,
+        new_state=EscrowState.FUNDS_HELD.value,
+        actor="paypal",
+        reason=f"Funds held in PayPal escrow (Auth ID: {auth_res['authorization_id']}).",
+        metadata=auth_res
+    )
+
+    if redirect:
+        return RedirectResponse(url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}")
+    return build_escrow_response(escrow)
 
 
 @router.post("/{escrow_id}/deliver", response_model=EscrowResponse)

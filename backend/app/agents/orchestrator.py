@@ -15,6 +15,7 @@ from app.paypal.orders import (
     capture_paypal_authorization,
     void_paypal_authorization
 )
+from app.paypal.client import get_paypal_client
 from app.models.mandate import Mandate
 from app.models.intent import PaymentIntent
 from app.models.escrow import Escrow
@@ -253,14 +254,16 @@ class AgentOrchestrator:
         self.db.add(escrow)
         self.db.commit()
 
-        # Create PayPal Order with seller payee routing
+        # Create PayPal Order with seller payee routing and return URLs
         order_res = await create_paypal_order(
             intent_id=intent.id,
             amount_minor=intent_amount,
             currency="USD",
             description="Mandate Escrow: Logo Design",
             payee_email=counterparty_record.paypal_email if counterparty_record else None,
-            payee_merchant_id=counterparty_record.paypal_merchant_id if counterparty_record else None
+            payee_merchant_id=counterparty_record.paypal_merchant_id if counterparty_record else None,
+            return_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?approved=true",
+            cancel_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{escrow.id}?cancelled=true"
         )
         escrow.paypal_order_id = order_res["order_id"]
         self.db.commit()
@@ -275,7 +278,33 @@ class AgentOrchestrator:
             data=order_res
         )
 
-        # Transition to BUYER_APPROVED then FUNDS_HELD
+        # Gated buyer approval: simulated approval ONLY runs when simulation mode is true
+        client = get_paypal_client()
+        if not client.simulation_mode:
+            await emit_timeline_event(
+                scenario=self.scenario_name,
+                event_type="WAITING_BUYER_APPROVAL",
+                actor="paypal",
+                step="5b. Waiting for Buyer Approval",
+                summary=f"Waiting for human buyer approval at PayPal: {order_res.get('approve_url')}",
+                status="WARNING",
+                data={
+                    "order_id": order_res["order_id"],
+                    "approve_url": order_res.get("approve_url"),
+                    "escrow_id": escrow.id
+                }
+            )
+            return {
+                "scenario": self.scenario_name,
+                "intent_id": intent.id,
+                "escrow_id": escrow.id,
+                "paypal_order_id": order_res["order_id"],
+                "approve_url": order_res.get("approve_url"),
+                "status": "WAITING_FOR_BUYER_APPROVAL",
+                "message": f"Real PayPal Order created. Please complete approval at {order_res.get('approve_url')} then call /approval-return."
+            }
+
+        # In simulation mode, transition to BUYER_APPROVED then FUNDS_HELD
         await transition_escrow_state(
             db=self.db,
             escrow=escrow,
@@ -287,6 +316,13 @@ class AgentOrchestrator:
 
         auth_res = await authorize_paypal_order(escrow.paypal_order_id, intent.id)
         escrow.paypal_authorization_id = auth_res["authorization_id"]
+        if auth_res.get("hold_expires_at"):
+            try:
+                from datetime import datetime
+                exp_str = auth_res["hold_expires_at"].replace("Z", "+00:00")
+                escrow.hold_expires_at = datetime.fromisoformat(exp_str)
+            except Exception:
+                pass
         self.db.commit()
 
         await transition_escrow_state(

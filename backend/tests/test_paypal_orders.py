@@ -168,3 +168,159 @@ def test_counterparty_crud_and_verification_api(client, db_session):
     assert list_resp.status_code == 200
     handles = [c["handle"] for c in list_resp.json()]
     assert "designer_bob" in handles
+
+
+@pytest.mark.asyncio
+async def test_create_paypal_order_sets_experience_context_urls():
+    mock_client = PayPalClient()
+    mock_client.simulation_mode = False
+    mock_client.request = AsyncMock(return_value={
+        "id": "ORD-URL-123",
+        "status": "CREATED",
+        "links": [{"rel": "approve", "href": "https://www.sandbox.paypal.com/checkoutnow?token=ORD-URL-123"}]
+    })
+
+    with patch("app.paypal.orders.get_paypal_client", return_value=mock_client):
+        res = await create_paypal_order(
+            intent_id="intent_url_test",
+            amount_minor=8000,
+            currency="USD",
+            return_url="https://platform.com/app/escrows/esc_123?approved=true",
+            cancel_url="https://platform.com/app/escrows/esc_123?cancelled=true"
+        )
+
+        assert res["order_id"] == "ORD-URL-123"
+        call_kwargs = mock_client.request.call_args.kwargs
+        json_payload = call_kwargs["json_data"]
+
+        assert "payment_source" in json_payload
+        exp_ctx = json_payload["payment_source"]["paypal"]["experience_context"]
+        assert exp_ctx["return_url"] == "https://platform.com/app/escrows/esc_123?approved=true"
+        assert exp_ctx["cancel_url"] == "https://platform.com/app/escrows/esc_123?cancelled=true"
+        assert exp_ctx["user_action"] == "CONTINUE"
+        assert exp_ctx["shipping_preference"] == "NO_SHIPPING"
+
+
+def test_approval_return_rejects_unapproved_order(client, sample_mandate, db_session):
+    from app.models.escrow import Escrow
+    from app.models.intent import PaymentIntent
+
+    intent = PaymentIntent(
+        mandate_id=sample_mandate.id,
+        counterparty="seller_agent_acme",
+        merchant_category="freelance_design",
+        amount_minor=6000,
+        currency="USD",
+        description="Logo escrow test",
+        decision="APPROVED"
+    )
+    db_session.add(intent)
+    db_session.commit()
+
+    escrow = Escrow(
+        intent_id=intent.id,
+        state="ORDER_CREATED",
+        paypal_order_id="ORD-UNAPPROVED-99"
+    )
+    db_session.add(escrow)
+    db_session.commit()
+
+    mock_client = PayPalClient()
+    mock_client.simulation_mode = False
+    mock_client.request = AsyncMock(return_value={"id": "ORD-UNAPPROVED-99", "status": "CREATED"})
+
+    with patch("app.api.escrows.get_paypal_client", return_value=mock_client):
+        resp = client.get(f"/api/escrows/{escrow.id}/approval-return")
+        assert resp.status_code == 400
+        assert "not approved" in resp.json()["detail"]
+
+
+def test_approval_return_authorizes_approved_order(client, sample_mandate, db_session):
+    from app.models.escrow import Escrow
+    from app.models.intent import PaymentIntent
+
+    intent = PaymentIntent(
+        mandate_id=sample_mandate.id,
+        counterparty="seller_agent_acme",
+        merchant_category="freelance_design",
+        amount_minor=7500,
+        currency="USD",
+        description="Vector design hold",
+        decision="APPROVED"
+    )
+    db_session.add(intent)
+    db_session.commit()
+
+    escrow = Escrow(
+        intent_id=intent.id,
+        state="ORDER_CREATED",
+        paypal_order_id="ORD-APPROVED-100"
+    )
+    db_session.add(escrow)
+    db_session.commit()
+
+    mock_client = PayPalClient()
+    mock_client.simulation_mode = False
+
+    async def mock_request(method, endpoint, **kwargs):
+        if method == "GET" and "/v2/checkout/orders/" in endpoint:
+            return {"id": "ORD-APPROVED-100", "status": "APPROVED"}
+        if method == "POST" and "/authorize" in endpoint:
+            return {
+                "id": "ORD-APPROVED-100",
+                "status": "COMPLETED",
+                "purchase_units": [
+                    {
+                        "payments": {
+                            "authorizations": [
+                                {
+                                    "id": "AUTH-LIVE-100",
+                                    "status": "CREATED",
+                                    "expiration_time": "2026-12-10T12:00:00Z"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        return {}
+
+    mock_client.request = AsyncMock(side_effect=mock_request)
+
+    with patch("app.api.escrows.get_paypal_client", return_value=mock_client), \
+         patch("app.paypal.orders.get_paypal_client", return_value=mock_client):
+        resp = client.get(f"/api/escrows/{escrow.id}/approval-return")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["state"] == "FUNDS_HELD"
+        assert data["paypal_authorization_id"] == "AUTH-LIVE-100"
+        assert data["hold_expires_at"] is not None
+
+        # Confirm persisted in DB
+        db_session.refresh(escrow)
+        assert escrow.state == "FUNDS_HELD"
+        assert escrow.paypal_authorization_id == "AUTH-LIVE-100"
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_waits_for_buyer_approval_in_non_simulation_mode(db_session, sample_mandate):
+    from app.agents.orchestrator import AgentOrchestrator
+
+    mock_client = PayPalClient()
+    mock_client.simulation_mode = False
+    mock_client.request = AsyncMock(return_value={
+        "id": "ORD-REAL-1234",
+        "status": "CREATED",
+        "links": [{"rel": "approve", "href": "https://www.sandbox.paypal.com/checkoutnow?token=ORD-REAL-1234"}]
+    })
+
+    orchestrator = AgentOrchestrator(db_session, scenario_name="test_approval_flow")
+
+    with patch("app.paypal.orders.get_paypal_client", return_value=mock_client), \
+         patch("app.agents.orchestrator.get_paypal_client", return_value=mock_client):
+        result = await orchestrator.run_scenario(sample_mandate.id, mode="honest")
+
+        assert result["status"] == "WAITING_FOR_BUYER_APPROVAL"
+        assert result["paypal_order_id"] == "ORD-REAL-1234"
+        assert "checkoutnow?token=ORD-REAL-1234" in result["approve_url"]
