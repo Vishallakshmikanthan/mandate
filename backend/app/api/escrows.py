@@ -19,6 +19,7 @@ from app.schemas.escrow import (
 )
 from app.core.escrow_machine import transition_escrow_state, get_escrow_for_update
 from app.core.arbiter import evaluate_deliverable_arbitration
+from app.core.audit import log_audit_event
 from app.core.spend_ledger import get_mandate_for_update, get_mandate_spend_metrics, record_spend_entry
 from app.core.policy_engine import evaluate_policy_rules
 from app.models.counterparty import Counterparty
@@ -291,6 +292,21 @@ async def run_arbitration(
     )
     db.add(verdict_rec)
     db.commit()
+
+    log_audit_event(
+        db=db,
+        actor="arbiter",
+        event="ARBITRATION_EVALUATED",
+        payload={
+            "escrow_id": e.id,
+            "verdict": verdict_output.verdict,
+            "confidence": verdict_output.confidence,
+            "partial_ratio": verdict_output.partial_ratio,
+            "model": verdict_output.model,
+            "prompt_version": verdict_output.prompt_version,
+            "criteria_count": len(verdict_output.criteria_results),
+        }
+    )
 
     intent_amount = e.intent.amount_minor if e.intent else 0
 

@@ -51,15 +51,37 @@ def test_app_env_prod_refuses_default_key():
     with pytest.raises(ValueError, match="must be at least 32 bytes long"):
         Settings(APP_ENV="dev", MANDATE_SIGNING_KEY="too_short_key")
 
-    # In prod with secure 32+ byte key and PostgreSQL -> succeeds
+    # In prod with secure 32+ byte key, PostgreSQL, and LLM key -> succeeds
     valid_key = "a" * 32
     s = Settings(
         APP_ENV="prod",
         MANDATE_SIGNING_KEY=valid_key,
-        DATABASE_URL="postgresql://mandate:mandate@localhost:5432/mandate"
+        DATABASE_URL="postgresql://mandate:mandate@localhost:5432/mandate",
+        LLM_PROVIDER="gemini",
+        LLM_API_KEY="test_gemini_key_12345"
     )
     assert s.APP_ENV == "prod"
     assert s.MANDATE_SIGNING_KEY == valid_key
+
+    # In prod with no LLM_API_KEY -> must raise ValueError
+    with pytest.raises(ValueError, match="LLM_API_KEY must be configured"):
+        Settings(
+            APP_ENV="prod",
+            MANDATE_SIGNING_KEY=valid_key,
+            DATABASE_URL="postgresql://mandate:mandate@localhost:5432/mandate",
+            LLM_PROVIDER="gemini",
+            LLM_API_KEY=""
+        )
+
+    # In prod with Mock provider -> must raise ValueError
+    with pytest.raises(ValueError, match="LLM_PROVIDER cannot be 'mock'"):
+        Settings(
+            APP_ENV="prod",
+            MANDATE_SIGNING_KEY=valid_key,
+            DATABASE_URL="postgresql://mandate:mandate@localhost:5432/mandate",
+            LLM_PROVIDER="mock",
+            LLM_API_KEY="some_key"
+        )
 
     # In prod with SQLite -> must raise ValueError
     with pytest.raises(ValueError, match="must be a PostgreSQL connection URL"):

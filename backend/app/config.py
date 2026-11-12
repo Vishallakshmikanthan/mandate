@@ -56,10 +56,20 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"Refusing to start in {env} environment: MANDATE_SIGNING_KEY must be at least 32 bytes long."
                 )
-        if env == "prod" and self.DATABASE_URL.startswith("sqlite"):
-            raise ValueError(
-                "Refusing to start in prod environment: DATABASE_URL must be a PostgreSQL connection URL, not SQLite."
-            )
+        if env == "prod":
+            if self.DATABASE_URL.startswith("sqlite"):
+                raise ValueError(
+                    "Refusing to start in prod environment: DATABASE_URL must be a PostgreSQL connection URL, not SQLite."
+                )
+            if self.LLM_PROVIDER.lower() == "mock":
+                raise ValueError(
+                    "Refusing to start in prod environment: LLM_PROVIDER cannot be 'mock'. "
+                    "Set LLM_PROVIDER to 'gemini', 'openai', or 'anthropic'."
+                )
+            if not self.LLM_API_KEY:
+                raise ValueError(
+                    "Refusing to start in prod environment: LLM_API_KEY must be configured."
+                )
         return self
 
 
