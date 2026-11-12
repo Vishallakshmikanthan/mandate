@@ -76,14 +76,17 @@ export async function createMandate(payload: any): Promise<MandateItem> {
   } catch (err) {
     if (!isDemoMode()) throw err;
     // Fallback for offline demo mode
-    const sig = "hmac_sha256_" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+    const sig = "ed25519_" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
     const newMandate: MandateItem = {
       id: "mnd_" + Math.random().toString(36).substring(2, 9),
       name: payload.policy.name || "Custom Mandate Policy",
       agent_id: payload.agent_id || "buyer_agent_alpha",
       owner_id: payload.owner_id || "usr_current",
       status: "ACTIVE",
-      signature: sig,
+      signature: payload.signature || sig,
+      public_key: payload.public_key || Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(""),
+      key_id: payload.key_id || "key_ed25519_demo_primary",
+      signature_algorithm: payload.signature_algorithm || "ed25519",
       created_at: new Date().toISOString(),
       expires_at: payload.policy.expires_at || new Date(Date.now() + 365 * 86400000).toISOString(),
       spent_to_date_minor: 0,
@@ -110,6 +113,49 @@ export async function revokeMandate(mandateId: string): Promise<any> {
     return { status: "REVOKED", id: mandateId };
   }
   throw new Error("Failed to revoke mandate");
+}
+
+export async function fetchOwnerKeys(): Promise<any[]> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/auth/keys`, { cache: "no-store" });
+    if (res.ok) return await res.json();
+    return [];
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function generateOwnerKeyPair(keyId?: string): Promise<any> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/auth/keys/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(keyId ? { key_id: keyId } : {}),
+    });
+    if (res.ok) return await res.json();
+    throw new Error("Failed to generate key pair");
+  } catch (err) {
+    if (!isDemoMode()) throw err;
+    return {
+      key_id: "key_ed25519_demo_" + Math.random().toString(36).substring(2, 8),
+      public_key: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(""),
+      private_key: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(""),
+      algorithm: "ed25519",
+    };
+  }
+}
+
+export async function rotateMandateKey(
+  mandateId: string,
+  payload: { new_key_id: string; new_public_key: string; new_signature: string }
+): Promise<MandateItem> {
+  const res = await fetch(`${getApiBase()}/api/mandates/${mandateId}/rotate-key`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to rotate key");
+  return await res.json();
 }
 
 export async function fetchPayments(): Promise<PaymentIntentItem[]> {

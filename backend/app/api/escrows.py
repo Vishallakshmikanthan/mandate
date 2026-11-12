@@ -24,6 +24,7 @@ from app.core.policy_engine import evaluate_policy_rules
 from app.models.counterparty import Counterparty
 from app.models.mandate import Mandate
 from app.models.intent import PaymentIntent
+from app.models.user_key import UserKey
 from app.core.auth import (
     get_current_user_or_agent,
     require_human,
@@ -433,6 +434,12 @@ async def submit_human_decision(
                 (Counterparty.handle == e.intent.counterparty) | (Counterparty.id == e.intent.counterparty)
             ).first()
 
+            owner_keys = db.query(UserKey).filter(
+                UserKey.user_id == mandate.owner_id,
+                UserKey.status == "ACTIVE"
+            ).all()
+            owner_public_keys = [k.public_key for k in owner_keys] if owner_keys else None
+
             rule_results = evaluate_policy_rules(
                 policy=mandate.policy,
                 mandate_signature=mandate.signature,
@@ -445,7 +452,11 @@ async def submit_human_decision(
                 spent_to_date_minor=metrics["allocated_spend_minor"],
                 rolling_24h_spend_minor=metrics["rolling_24h_spend_minor"],
                 txns_in_last_hour=metrics["txns_in_last_hour"],
-                counterparty_record=cp
+                counterparty_record=cp,
+                mandate_public_key=getattr(mandate, "public_key", None),
+                mandate_algorithm=getattr(mandate, "signature_algorithm", "ed25519"),
+                mandate_owner_id=mandate.owner_id,
+                owner_public_keys=owner_public_keys,
             )
             blocking_failures = [r.rule for r in rule_results if not r.passed and r.rule != "R9_ESCALATION_THRESHOLD"]
             if blocking_failures:

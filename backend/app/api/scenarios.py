@@ -150,7 +150,9 @@ async def run_red_team_suite(db: Session) -> Dict[str, Any]:
             spent_to_date_minor=0,
             rolling_24h_spend_minor=0,
             txns_in_last_hour=0,
-            counterparty_record=cp_rec
+            counterparty_record=cp_rec,
+            mandate_public_key=getattr(mandate, "public_key", None),
+            mandate_algorithm=getattr(mandate, "signature_algorithm", "ed25519"),
         )
         det_verdict = compute_deterministic_verdict(rule_results)
 

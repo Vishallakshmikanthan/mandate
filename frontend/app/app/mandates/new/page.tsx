@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ArrowRight } from "lucide-react";
-import { createMandate, fetchMandates, revokeMandate, subscribeToStream } from "@/lib/api";
+import { createMandate, fetchMandates, revokeMandate, subscribeToStream, generateOwnerKeyPair } from "@/lib/api";
 import { MandateItem } from "@/lib/demo-store";
 import { formatMoney, toMinorUnits } from "@/lib/money";
 
@@ -66,10 +66,14 @@ export default function MandateBuilderPage() {
   const handleSignAndActivate = async () => {
     setIsSigning(true);
     try {
+      const keyPair = await generateOwnerKeyPair();
       const created = await createMandate({
         owner_id: "usr_principal_1",
         agent_id: agentId,
         policy: jsonPolicy,
+        public_key: keyPair?.public_key,
+        key_id: keyPair?.key_id,
+        signature_algorithm: "ed25519",
       });
       alert(`Mandate successfully signed and activated! Mandate ID: ${created.id}`);
       router.push(`/app/mandates/${created.id}`);
@@ -293,7 +297,7 @@ export default function MandateBuilderPage() {
           <div className="flex items-center justify-between gap-3 pt-2">
             <div className="px-3.5 py-1.5 rounded-full text-xs text-neutral-300 bg-white/[0.04] border border-white/[0.08] flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span>HMAC-SHA256 ready</span>
+              <span>Ed25519 Asymmetric</span>
             </div>
 
             <div className="flex items-center gap-3">

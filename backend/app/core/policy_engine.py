@@ -25,6 +25,10 @@ def evaluate_policy_rules(
     txns_in_last_hour: int = 0,
     now_utc: Optional[datetime] = None,
     counterparty_record: Optional[Any] = None,
+    mandate_public_key: Optional[str] = None,
+    mandate_algorithm: Optional[str] = None,
+    mandate_owner_id: Optional[str] = None,
+    owner_public_keys: Optional[List[str]] = None,
 ) -> List[RuleEvaluationResult]:
     """
     Pure deterministic evaluation of Rules R1 through R10.
@@ -38,7 +42,22 @@ def evaluate_policy_rules(
     # --------------------------------------------------------------------------
     # R1: Mandate Valid (Signature, Status, Expiry)
     # --------------------------------------------------------------------------
-    sig_ok = verify_mandate_signature(policy, mandate_signature, signing_key)
+    algo = mandate_algorithm
+    if not algo or (algo == "ed25519" and not mandate_public_key):
+        algo = "ed25519" if mandate_public_key else "hmac-sha256"
+    sig_ok = verify_mandate_signature(
+        policy_data=policy,
+        signature=mandate_signature,
+        signing_key=signing_key,
+        public_key=mandate_public_key,
+        algorithm=algo,
+    )
+
+    owner_binding_ok = True
+    if sig_ok and mandate_public_key and owner_public_keys is not None:
+        if mandate_public_key not in owner_public_keys:
+            owner_binding_ok = False
+
     status_ok = (mandate_status == "ACTIVE")
 
     # Expiration check
@@ -56,15 +75,22 @@ def evaluate_policy_rules(
 
     not_expired = (now_utc <= expires_at)
 
-    r1_passed = sig_ok and status_ok and not_expired
+    r1_passed = sig_ok and owner_binding_ok and status_ok and not_expired
     if not sig_ok:
-        r1_detail = "Cryptographic signature verification failed (possible tampering detected)."
+        from app.config import settings
+        if algo == "hmac-sha256" and settings.APP_ENV != "demo":
+            r1_detail = "HMAC signature rejected: only Ed25519 asymmetric signatures are allowed outside demo environment."
+        else:
+            r1_detail = "Cryptographic signature verification failed (possible tampering detected)."
+    elif not owner_binding_ok:
+        r1_detail = f"Mandate signed with an unauthorized key not belonging to owner '{mandate_owner_id}'."
     elif not status_ok:
         r1_detail = f"Mandate status is {mandate_status} (must be ACTIVE)."
     elif not not_expired:
         r1_detail = f"Mandate expired at {expires_at.isoformat()}."
     else:
-        r1_detail = "HMAC signature verified, mandate ACTIVE, not expired."
+        detail_algo = "Ed25519 asymmetric" if algo == "ed25519" else "HMAC"
+        r1_detail = f"{detail_algo} signature verified, mandate ACTIVE, not expired."
     results.append(RuleEvaluationResult(rule="R1_MANDATE_VALID", passed=r1_passed, detail=r1_detail))
 
     # --------------------------------------------------------------------------

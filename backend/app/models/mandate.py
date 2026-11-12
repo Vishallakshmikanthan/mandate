@@ -11,7 +11,10 @@ class Mandate(Base):
     owner_id = Column(String(36), nullable=False)
     agent_id = Column(String(100), nullable=False)
     policy = Column(JSON, nullable=False)
-    signature = Column(String(128), nullable=False)
+    signature = Column(String(256), nullable=False)
+    public_key = Column(String(128), nullable=True)
+    key_id = Column(String(64), nullable=True)
+    signature_algorithm = Column(String(32), default="hmac-sha256", nullable=False)
     status = Column(String(20), nullable=False, default="ACTIVE")  # ACTIVE, REVOKED, EXPIRED
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     expires_at = Column(DateTime, nullable=False)

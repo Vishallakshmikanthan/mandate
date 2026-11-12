@@ -11,6 +11,7 @@ from app.models.spend_ledger import SpendLedger
 from app.models.paypal_action import PayPalAction
 from app.models.user import User
 from app.models.api_key import APIKey
+from app.models.user_key import UserKey
 
 __all__ = [
     "Mandate",
@@ -26,4 +27,5 @@ __all__ = [
     "PayPalAction",
     "User",
     "APIKey",
+    "UserKey",
 ]

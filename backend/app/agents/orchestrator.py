@@ -132,7 +132,9 @@ class AgentOrchestrator:
             spent_to_date_minor=0,
             rolling_24h_spend_minor=0,
             txns_in_last_hour=0,
-            counterparty_record=counterparty_record
+            counterparty_record=counterparty_record,
+            mandate_public_key=getattr(mandate, "public_key", None),
+            mandate_algorithm=getattr(mandate, "signature_algorithm", "ed25519"),
         )
         deterministic_verdict = compute_deterministic_verdict(rule_results)
 

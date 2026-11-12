@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -7,6 +7,9 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.user import User
 from app.models.api_key import APIKey
+from app.models.user_key import UserKey
+from app.schemas.mandate import UserKeyRegister, UserKeyResponse
+from app.core.mandate_signing import generate_ed25519_keypair, sign_policy_ed25519, canonicalize_policy
 from app.core.auth import (
     hash_password,
     verify_password,
@@ -207,3 +210,127 @@ def revoke_agent_api_key(
     key.is_active = False
     db.commit()
     return {"status": "SUCCESS", "message": f"API key '{key.name}' revoked successfully."}
+
+
+# -----------------------------------------------------------------------------
+# Mandate Owner Cryptographic Keys (Ed25519)
+# -----------------------------------------------------------------------------
+
+@router.post("/keys", response_model=UserKeyResponse, status_code=status.HTTP_201_CREATED)
+def register_owner_key(
+    req: UserKeyRegister,
+    auth: AuthContext = Depends(require_human),
+    db: Session = Depends(get_db)
+):
+    """Register an Ed25519 public key for the authenticated human supervisor."""
+    existing = db.query(UserKey).filter(UserKey.public_key == req.public_key).first()
+    if existing:
+        if existing.user_id != auth.user_id:
+            raise HTTPException(status_code=403, detail="Public key is already registered to another user.")
+        return existing
+
+    new_key = UserKey(
+        user_id=auth.user_id,
+        key_id=req.key_id,
+        public_key=req.public_key,
+        algorithm=req.algorithm,
+        status="ACTIVE"
+    )
+    db.add(new_key)
+    db.commit()
+    db.refresh(new_key)
+    return new_key
+
+
+@router.get("/keys", response_model=List[UserKeyResponse])
+def list_owner_keys(
+    auth: AuthContext = Depends(require_human),
+    db: Session = Depends(get_db)
+):
+    """List all registered cryptographic keys for current supervisor."""
+    return db.query(UserKey).filter(UserKey.user_id == auth.user_id).order_by(UserKey.created_at.desc()).all()
+
+
+class GeneratedKeyPairResponse(BaseModel):
+    key_id: str
+    public_key: str
+    private_key: str
+    algorithm: str
+
+
+@router.post("/keys/generate", response_model=GeneratedKeyPairResponse, status_code=status.HTTP_201_CREATED)
+def generate_owner_keypair(
+    key_id: Optional[str] = None,
+    auth: AuthContext = Depends(require_human),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a fresh Ed25519 key pair for client signing.
+    Automatically registers the public key for the current supervisor.
+    Returns the private key only once for client storage.
+    """
+    priv_hex, pub_hex = generate_ed25519_keypair()
+    assigned_key_id = key_id or f"key_ed25519_{pub_hex[:8]}"
+
+    new_key = UserKey(
+        user_id=auth.user_id,
+        key_id=assigned_key_id,
+        public_key=pub_hex,
+        algorithm="ed25519",
+        status="ACTIVE"
+    )
+    db.add(new_key)
+    db.commit()
+
+    return GeneratedKeyPairResponse(
+        key_id=assigned_key_id,
+        public_key=pub_hex,
+        private_key=priv_hex,
+        algorithm="ed25519"
+    )
+
+
+@router.post("/keys/{key_id}/revoke")
+def revoke_owner_key(
+    key_id: str,
+    auth: AuthContext = Depends(require_human),
+    db: Session = Depends(get_db)
+):
+    """Revoke an owner key pair."""
+    key = db.query(UserKey).filter(UserKey.key_id == key_id, UserKey.user_id == auth.user_id).first()
+    if not key:
+        raise HTTPException(status_code=404, detail="Key not found.")
+
+    key.status = "REVOKED"
+    key.revoked_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"status": "SUCCESS", "message": f"Owner key '{key.key_id}' revoked."}
+
+
+class SignPolicyRequest(BaseModel):
+    policy: Dict[str, Any]
+    private_key: str
+
+
+class SignPolicyResponse(BaseModel):
+    canonical_policy: str
+    signature: str
+    algorithm: str = "ed25519"
+
+
+@router.post("/keys/sign", response_model=SignPolicyResponse)
+def sign_policy_endpoint(
+    req: SignPolicyRequest,
+    auth: AuthContext = Depends(require_human),
+):
+    """
+    Sign a canonical policy using an Ed25519 private key.
+    Useful for testing, CLI agents, and client signing environments.
+    """
+    canonical_str = canonicalize_policy(req.policy)
+    sig_hex = sign_policy_ed25519(req.policy, req.private_key)
+    return SignPolicyResponse(
+        canonical_policy=canonical_str,
+        signature=sig_hex,
+        algorithm="ed25519"
+    )

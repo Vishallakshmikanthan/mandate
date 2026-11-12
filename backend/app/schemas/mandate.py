@@ -34,6 +34,16 @@ class MandateCreate(BaseModel):
     owner_id: str = Field(..., description="UUID or identifier of the human principal")
     agent_id: str = Field(..., description="Identifier of the autonomous agent operating under this mandate")
     policy: MandatePolicy = Field(..., description="Policy constraints and spending rules")
+    public_key: Optional[str] = Field(None, description="Hex-encoded Ed25519 public key of the owner (64 hex characters)")
+    signature: Optional[str] = Field(None, description="Hex-encoded Ed25519 signature of the canonical policy (128 hex characters)")
+    key_id: Optional[str] = Field(None, description="Identifier of the owner key pair used for signing")
+    signature_algorithm: Optional[str] = Field("ed25519", description="Cryptographic algorithm: ed25519 or hmac-sha256")
+
+
+class MandateRotateKey(BaseModel):
+    new_key_id: str = Field(..., description="Identifier for the new owner key")
+    new_public_key: str = Field(..., description="Hex-encoded Ed25519 public key (64 hex chars)")
+    new_signature: str = Field(..., description="Hex-encoded signature of the mandate's canonical policy signed with the new private key")
 
 
 class MandateResponse(BaseModel):
@@ -42,6 +52,9 @@ class MandateResponse(BaseModel):
     agent_id: str
     policy: MandatePolicy
     signature: str
+    public_key: Optional[str] = None
+    key_id: Optional[str] = None
+    signature_algorithm: str = "ed25519"
     status: str
     created_at: datetime
     expires_at: datetime
@@ -53,3 +66,21 @@ class MandateResponse(BaseModel):
 
 class MandateRevoke(BaseModel):
     reason: Optional[str] = Field(None, description="Optional explanation for manual revocation")
+
+
+class UserKeyRegister(BaseModel):
+    key_id: str = Field(..., description="Client identifier for the key (e.g. 'key_ed25519_primary')")
+    public_key: str = Field(..., description="Hex-encoded Ed25519 public key (64 hex chars)")
+    algorithm: str = Field("ed25519", description="Cryptographic algorithm")
+
+
+class UserKeyResponse(BaseModel):
+    id: str
+    key_id: str
+    public_key: str
+    algorithm: str
+    status: str
+    created_at: datetime
+    revoked_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)

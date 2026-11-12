@@ -9,6 +9,7 @@ from app.models.mandate import Mandate
 from app.models.intent import PaymentIntent
 from app.models.escrow import Escrow
 from app.models.counterparty import Counterparty
+from app.models.user_key import UserKey
 from app.schemas.intent import PaymentIntentCreate, PaymentIntentResponse, RuleEvaluationResult
 from app.schemas.escrow import EscrowState
 from app.core.policy_engine import evaluate_policy_rules, compute_deterministic_verdict
@@ -70,6 +71,13 @@ async def submit_payment_intent(
         (Counterparty.handle == req.counterparty) | (Counterparty.id == req.counterparty)
     ).first()
 
+    # Look up active keys for owner to verify asymmetric key binding
+    owner_keys = db.query(UserKey).filter(
+        UserKey.user_id == mandate.owner_id,
+        UserKey.status == "ACTIVE"
+    ).all()
+    owner_public_keys = [k.public_key for k in owner_keys] if owner_keys else None
+
     # 1. Evaluate Deterministic Policy Engine (R1 - R10)
     rule_results = evaluate_policy_rules(
         policy=mandate.policy,
@@ -84,7 +92,11 @@ async def submit_payment_intent(
         rolling_24h_spend_minor=int(rolling_24h_spend),
         txns_in_last_hour=int(txns_in_last_hour),
         now_utc=now_utc,
-        counterparty_record=counterparty_obj
+        counterparty_record=counterparty_obj,
+        mandate_public_key=getattr(mandate, "public_key", None),
+        mandate_algorithm=getattr(mandate, "signature_algorithm", "ed25519"),
+        mandate_owner_id=mandate.owner_id,
+        owner_public_keys=owner_public_keys,
     )
     deterministic_verdict = compute_deterministic_verdict(rule_results)
 
