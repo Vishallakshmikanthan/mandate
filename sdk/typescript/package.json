@@ -1,0 +1,23 @@
+{
+  "name": "@mandate/sdk",
+  "version": "1.0.0",
+  "description": "The Trust Layer for AI Agents That Spend Money - Official TypeScript SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mandate",
+    "ai-agents",
+    "agentic-payments",
+    "escrow",
+    "fintech"
+  ],
+  "author": "Mandate Engineering Team",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
