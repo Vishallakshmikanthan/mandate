@@ -134,8 +134,9 @@ def test_concurrent_arbitration_calls_single_capture_and_valid_audit(client, sam
         assert capture_count == 1
 
         # Escrow is in single terminal state: RELEASED
-        db_session.refresh(escrow)
-        assert escrow.state == "RELEASED"
+        fresh_escrow = db_session.query(Escrow).filter(Escrow.id == escrow.id).first()
+        assert fresh_escrow is not None
+        assert fresh_escrow.state == "RELEASED"
 
         # The cryptographic hash-chained audit trail remains completely valid
         audit_res = verify_audit_chain(db_session)

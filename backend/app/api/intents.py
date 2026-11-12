@@ -15,6 +15,7 @@ from app.core.policy_engine import evaluate_policy_rules, compute_deterministic_
 from app.core.risk_scorer import score_intent_risk, apply_tighten_only_rule
 from app.core.audit import log_audit_event
 from app.core.stream_broadcaster import emit_timeline_event
+from app.core.spend_ledger import get_mandate_for_update, get_mandate_spend_metrics, record_spend_entry
 from app.paypal.orders import create_paypal_order
 
 router = APIRouter(prefix="/intents", tags=["Payment Intents"])
@@ -25,32 +26,20 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
     """
     Submit a payment intent through the Mandate Gateway.
     Executes Policy Engine rules (R1-R10) and LLM Risk Scorer.
+    Serializes concurrent budget checks with row locking and spend ledger accounting.
     """
-    mandate = db.query(Mandate).filter(Mandate.id == req.mandate_id).first()
+    # 0. Acquire row-level lock on the governing mandate
+    mandate = get_mandate_for_update(db, req.mandate_id)
     if not mandate:
         raise HTTPException(status_code=404, detail="Mandate not found")
 
     now_utc = datetime.now(timezone.utc)
-    one_day_ago = now_utc - timedelta(hours=24)
-    one_hour_ago = now_utc - timedelta(hours=1)
 
-    # Calculate metrics
-    spent_to_date = db.query(func.sum(PaymentIntent.amount_minor)).filter(
-        PaymentIntent.mandate_id == mandate.id,
-        PaymentIntent.decision == "APPROVED"
-    ).scalar() or 0
-
-    rolling_24h_spend = db.query(func.sum(PaymentIntent.amount_minor)).filter(
-        PaymentIntent.mandate_id == mandate.id,
-        PaymentIntent.decision == "APPROVED",
-        PaymentIntent.created_at >= one_day_ago
-    ).scalar() or 0
-
-    txns_in_last_hour = db.query(func.count(PaymentIntent.id)).filter(
-        PaymentIntent.mandate_id == mandate.id,
-        PaymentIntent.decision == "APPROVED",
-        PaymentIntent.created_at >= one_hour_ago
-    ).scalar() or 0
+    # Compute metrics from ledger (active reserves + settled commits)
+    metrics = get_mandate_spend_metrics(db, mandate.id, now_utc=now_utc)
+    allocated_spend = metrics["allocated_spend_minor"]
+    rolling_24h_spend = metrics["rolling_24h_spend_minor"]
+    txns_in_last_hour = metrics["txns_in_last_hour"]
 
     # Look up counterparty in registry
     counterparty_obj = db.query(Counterparty).filter(
@@ -67,7 +56,7 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
         currency=req.currency,
         counterparty=req.counterparty,
         merchant_category=req.merchant_category,
-        spent_to_date_minor=int(spent_to_date),
+        spent_to_date_minor=int(allocated_spend),
         rolling_24h_spend_minor=int(rolling_24h_spend),
         txns_in_last_hour=int(txns_in_last_hour),
         now_utc=now_utc,
@@ -128,6 +117,15 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
     # Manage Escrow lifecycle based on decision
     escrow_id = None
     if final_decision == "APPROVED":
+        # Record spend reservation in ledger in the same transaction
+        record_spend_entry(
+            db=db,
+            mandate_id=mandate.id,
+            intent_id=intent.id,
+            amount_minor=req.amount_minor,
+            kind="RESERVE"
+        )
+
         escrow = Escrow(
             intent_id=intent.id,
             state=EscrowState.ORDER_CREATED.value,

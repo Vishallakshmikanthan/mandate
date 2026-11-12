@@ -19,6 +19,10 @@ from app.schemas.escrow import (
 )
 from app.core.escrow_machine import transition_escrow_state, get_escrow_for_update
 from app.core.arbiter import evaluate_deliverable_arbitration
+from app.core.spend_ledger import get_mandate_for_update, get_mandate_spend_metrics, record_spend_entry
+from app.core.policy_engine import evaluate_policy_rules
+from app.models.counterparty import Counterparty
+from app.models.mandate import Mandate
 from app.paypal.orders import (
     create_paypal_order,
     authorize_paypal_order,
@@ -82,6 +86,7 @@ def get_escrow(escrow_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{escrow_id}/approval-return", response_model=EscrowResponse)
+@router.post("/{escrow_id}/approval-return", response_model=EscrowResponse)
 async def handle_approval_return(
     escrow_id: str,
     token: Optional[str] = None,
@@ -253,6 +258,16 @@ async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
             e.paypal_capture_id = cap_res.get("capture_id")
             db.commit()
 
+        # Commit spend in ledger
+        if e.intent:
+            record_spend_entry(
+                db=db,
+                mandate_id=e.intent.mandate_id,
+                intent_id=e.intent_id,
+                amount_minor=intent_amount,
+                kind="COMMIT"
+            )
+
         await transition_escrow_state(
             db=db,
             escrow=e,
@@ -274,6 +289,25 @@ async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
             await void_paypal_authorization(e.paypal_authorization_id, e.intent_id)
             db.commit()
 
+        # Commit captured amount and release remainder
+        if e.intent:
+            record_spend_entry(
+                db=db,
+                mandate_id=e.intent.mandate_id,
+                intent_id=e.intent_id,
+                amount_minor=partial_cents,
+                kind="COMMIT"
+            )
+            remainder = intent_amount - partial_cents
+            if remainder > 0:
+                record_spend_entry(
+                    db=db,
+                    mandate_id=e.intent.mandate_id,
+                    intent_id=e.intent_id,
+                    amount_minor=remainder,
+                    kind="RELEASE"
+                )
+
         await transition_escrow_state(
             db=db,
             escrow=e,
@@ -285,6 +319,16 @@ async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
     elif verdict_output.verdict == "FAIL":
         if e.paypal_authorization_id:
             await void_paypal_authorization(e.paypal_authorization_id, e.intent_id)
+
+        # Release allocation in ledger
+        if e.intent:
+            record_spend_entry(
+                db=db,
+                mandate_id=e.intent.mandate_id,
+                intent_id=e.intent_id,
+                amount_minor=intent_amount,
+                kind="RELEASE"
+            )
 
         await transition_escrow_state(
             db=db,
@@ -318,12 +362,53 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
 
     if action_upper == "APPROVE":
         if e.state == EscrowState.ESCALATED.value:
+            # Re-check budget rules (R2-R4, R8) before approving escalation
+            mandate = get_mandate_for_update(db, e.intent.mandate_id)
+            metrics = get_mandate_spend_metrics(db, mandate.id)
+            cp = db.query(Counterparty).filter(
+                (Counterparty.handle == e.intent.counterparty) | (Counterparty.id == e.intent.counterparty)
+            ).first()
+
+            rule_results = evaluate_policy_rules(
+                policy=mandate.policy,
+                mandate_signature=mandate.signature,
+                mandate_status=mandate.status,
+                signing_key=settings.MANDATE_SIGNING_KEY,
+                amount_minor=e.intent.amount_minor,
+                currency=e.intent.currency,
+                counterparty=e.intent.counterparty,
+                merchant_category=e.intent.merchant_category,
+                spent_to_date_minor=metrics["allocated_spend_minor"],
+                rolling_24h_spend_minor=metrics["rolling_24h_spend_minor"],
+                txns_in_last_hour=metrics["txns_in_last_hour"],
+                counterparty_record=cp
+            )
+            blocking_failures = [r.rule for r in rule_results if not r.passed and r.rule != "R9_ESCALATION_THRESHOLD"]
+            if blocking_failures:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot approve escalation: budget or policy constraints violated: {blocking_failures}"
+                )
+
+            # Record RESERVE in spend ledger
+            record_spend_entry(
+                db=db,
+                mandate_id=mandate.id,
+                intent_id=e.intent_id,
+                amount_minor=e.intent.amount_minor,
+                kind="RESERVE"
+            )
+
             # Human approves escalated intent -> advance to ORDER_CREATED
             order_res = await create_paypal_order(
                 intent_id=e.intent_id,
                 amount_minor=e.intent.amount_minor,
                 currency=e.intent.currency,
-                description=e.intent.description
+                description=e.intent.description,
+                payee_email=cp.paypal_email if cp else None,
+                payee_merchant_id=cp.paypal_merchant_id if cp else None,
+                return_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{e.id}?approved=true",
+                cancel_url=f"{settings.FRONTEND_ORIGIN}/app/escrows/{e.id}?cancelled=true"
             )
             e.paypal_order_id = order_res.get("order_id")
             db.commit()
@@ -334,7 +419,7 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
                 actor="human",
                 reason=f"Human supervisor approved escalation. Notes: {req.notes or 'None'}"
             )
-        elif e.state in (EscrowState.NEEDS_HUMAN.value, EscrowState.UNDER_ARBITRATION.value):
+        elif e.state in (EscrowState.NEEDS_HUMAN.value, EscrowState.UNDER_ARBITRATION.value, EscrowState.DELIVERED.value):
             if e.paypal_authorization_id:
                 cap_res = await capture_paypal_authorization(
                     authorization_id=e.paypal_authorization_id,
@@ -343,6 +428,17 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
                 )
                 e.paypal_capture_id = cap_res.get("capture_id")
                 db.commit()
+
+            # Record COMMIT in spend ledger
+            if e.intent:
+                record_spend_entry(
+                    db=db,
+                    mandate_id=e.intent.mandate_id,
+                    intent_id=e.intent_id,
+                    amount_minor=e.intent.amount_minor,
+                    kind="COMMIT"
+                )
+
             await transition_escrow_state(
                 db=db,
                 escrow=e,
@@ -362,9 +458,20 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
                 actor="human",
                 reason=f"Human supervisor rejected escalated intent. Notes: {req.notes or 'None'}"
             )
-        elif e.state in (EscrowState.NEEDS_HUMAN.value, EscrowState.UNDER_ARBITRATION.value, EscrowState.FUNDS_HELD.value):
+        elif e.state in (EscrowState.NEEDS_HUMAN.value, EscrowState.UNDER_ARBITRATION.value, EscrowState.FUNDS_HELD.value, EscrowState.DELIVERED.value):
             if e.paypal_authorization_id:
                 await void_paypal_authorization(e.paypal_authorization_id, e.intent_id)
+
+            # Record RELEASE in spend ledger
+            if e.intent:
+                record_spend_entry(
+                    db=db,
+                    mandate_id=e.intent.mandate_id,
+                    intent_id=e.intent_id,
+                    amount_minor=e.intent.amount_minor,
+                    kind="RELEASE"
+                )
+
             await transition_escrow_state(
                 db=db,
                 escrow=e,

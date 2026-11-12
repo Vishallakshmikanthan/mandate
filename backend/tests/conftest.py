@@ -17,6 +17,7 @@ from app.models.arbiter import ArbiterVerdictRecord
 from app.models.audit import AuditLog
 from app.models.webhook import WebhookEvent
 from app.models.counterparty import Counterparty
+from app.models.spend_ledger import SpendLedger
 
 # Use in-memory SQLite with StaticPool so all connections share the memory DB
 TEST_DATABASE_URL = "sqlite:///:memory:"

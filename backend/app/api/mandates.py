@@ -11,17 +11,15 @@ from app.schemas.mandate import MandateCreate, MandateResponse, MandateRevoke, M
 from app.core.mandate_signing import sign_policy, canonicalize_policy
 from app.core.audit import log_audit_event
 from app.core.stream_broadcaster import emit_timeline_event
+from app.core.spend_ledger import get_mandate_spend_metrics
 
 router = APIRouter(prefix="/mandates", tags=["Mandates"])
 
 
 def get_spent_to_date(db: Session, mandate_id: str) -> int:
-    """Calculate cumulative approved spend under this mandate."""
-    result = db.query(func.sum(PaymentIntent.amount_minor)).filter(
-        PaymentIntent.mandate_id == mandate_id,
-        PaymentIntent.decision == "APPROVED"
-    ).scalar()
-    return int(result or 0)
+    """Calculate cumulative settled spend from the spend ledger."""
+    metrics = get_mandate_spend_metrics(db, mandate_id)
+    return metrics["spent_to_date_minor"]
 
 
 @router.post("", response_model=MandateResponse, status_code=status.HTTP_201_CREATED)
@@ -83,11 +81,11 @@ async def create_mandate(req: MandateCreate, db: Session = Depends(get_db)):
 
 @router.get("", response_model=List[MandateResponse])
 def list_mandates(db: Session = Depends(get_db)):
-    """List all mandates with spend stats."""
+    """List all mandates with spend stats computed from the immutable ledger."""
     mandates = db.query(Mandate).order_by(Mandate.created_at.desc()).all()
     out = []
     for m in mandates:
-        spent = get_spent_to_date(db, m.id)
+        metrics = get_mandate_spend_metrics(db, m.id)
         max_total = m.policy.get("max_total_minor", 0)
         out.append(MandateResponse(
             id=m.id,
@@ -98,20 +96,20 @@ def list_mandates(db: Session = Depends(get_db)):
             status=m.status,
             created_at=m.created_at,
             expires_at=m.expires_at,
-            spent_to_date_minor=spent,
-            remaining_budget_minor=max(0, max_total - spent)
+            spent_to_date_minor=metrics["spent_to_date_minor"],
+            remaining_budget_minor=max(0, max_total - metrics["allocated_spend_minor"])
         ))
     return out
 
 
 @router.get("/{mandate_id}", response_model=MandateResponse)
 def get_mandate(mandate_id: str, db: Session = Depends(get_db)):
-    """Get single mandate details and spend balance."""
+    """Get single mandate details and spend balance from the immutable ledger."""
     m = db.query(Mandate).filter(Mandate.id == mandate_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Mandate not found")
 
-    spent = get_spent_to_date(db, m.id)
+    metrics = get_mandate_spend_metrics(db, m.id)
     max_total = m.policy.get("max_total_minor", 0)
     return MandateResponse(
         id=m.id,
@@ -122,8 +120,8 @@ def get_mandate(mandate_id: str, db: Session = Depends(get_db)):
         status=m.status,
         created_at=m.created_at,
         expires_at=m.expires_at,
-        spent_to_date_minor=spent,
-        remaining_budget_minor=max(0, max_total - spent)
+        spent_to_date_minor=metrics["spent_to_date_minor"],
+        remaining_budget_minor=max(0, max_total - metrics["allocated_spend_minor"])
     )
 
 
