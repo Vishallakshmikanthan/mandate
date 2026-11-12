@@ -11,5 +11,5 @@ class AuditLog(Base):
     actor = Column(String(50), nullable=False)  # buyer_agent, seller_agent, gateway, arbiter, paypal, human
     event = Column(String(100), nullable=False)
     payload = Column(JSON, nullable=False, default=dict)
-    prev_hash = Column(String(64), nullable=False)
+    prev_hash = Column(String(64), nullable=False, unique=True, index=True)
     hash = Column(String(64), nullable=False)

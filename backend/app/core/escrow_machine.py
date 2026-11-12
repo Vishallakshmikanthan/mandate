@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, Set
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.models.escrow import Escrow
 from app.schemas.escrow import EscrowState
@@ -13,6 +14,23 @@ logger = logging.getLogger("mandate.escrow_machine")
 class InvalidStateTransitionError(Exception):
     """Raised when an illegal transition is attempted on an escrow entity."""
     pass
+
+
+def get_escrow_for_update(db: Session, escrow_id: str) -> Optional[Escrow]:
+    """
+    Acquire a row-level lock on the escrow record.
+    Uses SELECT ... FOR UPDATE on PostgreSQL and BEGIN IMMEDIATE on SQLite.
+    """
+    bind = db.get_bind()
+    dialect_name = bind.dialect.name if bind else ""
+    if dialect_name == "sqlite":
+        try:
+            db.execute(text("BEGIN IMMEDIATE"))
+        except Exception:
+            pass
+        return db.query(Escrow).filter(Escrow.id == escrow_id).first()
+    else:
+        return db.query(Escrow).filter(Escrow.id == escrow_id).with_for_update().first()
 
 
 VALID_TRANSITIONS: Dict[str, Set[str]] = {
@@ -76,11 +94,12 @@ async def transition_escrow_state(
     actor: str,
     reason: str,
     metadata: Optional[Dict[str, Any]] = None,
-    scenario: Optional[str] = None
+    scenario: Optional[str] = None,
+    commit: bool = True
 ) -> Escrow:
     """
     Execute a validated state transition on an escrow contract.
-    Persists changes, logs to the hash-chained audit trail, and broadcasts SSE events.
+    Atomically updates state and records to the cryptographic audit trail in a single transaction.
     """
     curr_state = escrow.state
     allowed = VALID_TRANSITIONS.get(curr_state, set())
@@ -92,10 +111,9 @@ async def transition_escrow_state(
 
     escrow.state = new_state
     escrow.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(escrow)
+    escrow.version = (escrow.version or 0) + 1
 
-    # Record to cryptographic audit chain
+    # Record to cryptographic audit chain in the same transaction
     audit_payload = {
         "escrow_id": escrow.id,
         "from_state": curr_state,
@@ -104,14 +122,20 @@ async def transition_escrow_state(
         "paypal_order_id": escrow.paypal_order_id,
         "paypal_authorization_id": escrow.paypal_authorization_id,
         "paypal_capture_id": escrow.paypal_capture_id,
+        "version": escrow.version,
         "metadata": metadata or {}
     }
     log_audit_event(
         db=db,
         actor=actor,
         event=f"ESCROW_{new_state}",
-        payload=audit_payload
+        payload=audit_payload,
+        commit=commit
     )
+
+    if commit:
+        db.commit()
+        db.refresh(escrow)
 
     # Determine status color for dashboard
     status_map = {

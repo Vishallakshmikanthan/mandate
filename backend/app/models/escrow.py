@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, DateTime, JSON, ForeignKey, Integer
 from sqlalchemy.orm import relationship
 from app.db import Base
 
@@ -16,6 +16,7 @@ class Escrow(Base):
     state = Column(String(50), nullable=False, default="INTENT_RECEIVED")
     spec = Column(JSON, nullable=False, default=dict)
     hold_expires_at = Column(DateTime, nullable=True)
+    version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

@@ -17,7 +17,7 @@ from app.schemas.escrow import (
     EscrowState,
     CriterionResult
 )
-from app.core.escrow_machine import transition_escrow_state
+from app.core.escrow_machine import transition_escrow_state, get_escrow_for_update
 from app.core.arbiter import evaluate_deliverable_arbitration
 from app.paypal.orders import (
     create_paypal_order,
@@ -164,9 +164,15 @@ async def handle_approval_return(
 @router.post("/{escrow_id}/deliver", response_model=EscrowResponse)
 async def submit_deliverable(escrow_id: str, req: DeliverableCreate, db: Session = Depends(get_db)):
     """Seller agent submits deliverable against escrow spec."""
-    e = db.query(Escrow).filter(Escrow.id == escrow_id).first()
+    e = get_escrow_for_update(db, escrow_id)
     if not e:
         raise HTTPException(status_code=404, detail="Escrow not found")
+
+    if e.state != EscrowState.FUNDS_HELD.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Escrow is in state '{e.state}', expected 'FUNDS_HELD' to submit deliverable."
+        )
 
     deliverable = Deliverable(
         escrow_id=e.id,
@@ -191,9 +197,15 @@ async def submit_deliverable(escrow_id: str, req: DeliverableCreate, db: Session
 @router.post("/{escrow_id}/arbitrate", response_model=EscrowResponse)
 async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
     """Trigger AI Arbiter to evaluate deliverable and settle PayPal funds."""
-    e = db.query(Escrow).filter(Escrow.id == escrow_id).first()
+    e = get_escrow_for_update(db, escrow_id)
     if not e:
         raise HTTPException(status_code=404, detail="Escrow not found")
+
+    if e.state != EscrowState.DELIVERED.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Escrow is in state '{e.state}', expected 'DELIVERED' to run arbitration."
+        )
 
     if not e.deliverables:
         raise HTTPException(status_code=400, detail="No deliverable submitted yet to arbitrate.")
@@ -298,7 +310,7 @@ async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
 @router.post("/{escrow_id}/human-decision", response_model=EscrowResponse)
 async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: Session = Depends(get_db)):
     """Human supervisor override for escalated or contested escrows."""
-    e = db.query(Escrow).filter(Escrow.id == escrow_id).first()
+    e = get_escrow_for_update(db, escrow_id)
     if not e:
         raise HTTPException(status_code=404, detail="Escrow not found")
 
@@ -339,7 +351,7 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
                 reason=f"Human supervisor manually approved release. Notes: {req.notes or 'None'}"
             )
         else:
-            raise HTTPException(status_code=400, detail=f"Cannot approve escrow in state {e.state}")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Cannot approve escrow in state {e.state}")
 
     elif action_upper == "REJECT":
         if e.state == EscrowState.ESCALATED.value:
@@ -361,7 +373,7 @@ async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: S
                 reason=f"Human supervisor rejected deliverable. Voided authorization. Notes: {req.notes or 'None'}"
             )
         else:
-            raise HTTPException(status_code=400, detail=f"Cannot reject escrow in state {e.state}")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Cannot reject escrow in state {e.state}")
 
     else:
         raise HTTPException(status_code=400, detail=f"Invalid action '{req.action}'. Expected 'APPROVE' or 'REJECT'.")

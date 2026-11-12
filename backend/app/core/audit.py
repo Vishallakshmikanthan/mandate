@@ -2,6 +2,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.models.audit import AuditLog
 from app.core.mandate_signing import canonicalize_policy
@@ -31,30 +32,46 @@ def log_audit_event(
     actor: str,
     event: str,
     payload: Dict[str, Any],
-    ts: Optional[datetime] = None
+    ts: Optional[datetime] = None,
+    commit: bool = True,
+    max_retries: int = 5
 ) -> AuditLog:
-    """Append a tamper-evident event to the cryptographic audit chain."""
+    """
+    Append a tamper-evident event to the cryptographic audit chain.
+    If commit=False, flushes entry in current transaction without committing.
+    Retries on prev_hash uniqueness conflicts to serialize concurrent writes.
+    """
     if ts is None:
         ts = datetime.now(timezone.utc)
 
-    # Get the latest audit log entry to establish the chain link
-    latest = db.query(AuditLog).order_by(AuditLog.id.desc()).first()
-    prev_hash = latest.hash if latest else GENESIS_HASH
+    for attempt in range(max_retries):
+        sp = db.begin_nested()
+        try:
+            # Get the latest audit log entry to establish the chain link
+            latest = db.query(AuditLog).order_by(AuditLog.id.desc()).first()
+            prev_hash = latest.hash if latest else GENESIS_HASH
 
-    node_hash = compute_audit_hash(prev_hash, ts, actor, event, payload)
+            node_hash = compute_audit_hash(prev_hash, ts, actor, event, payload)
 
-    entry = AuditLog(
-        ts=ts,
-        actor=actor,
-        event=event,
-        payload=payload,
-        prev_hash=prev_hash,
-        hash=node_hash
-    )
-    db.add(entry)
-    db.commit()
-    db.refresh(entry)
-    return entry
+            entry = AuditLog(
+                ts=ts,
+                actor=actor,
+                event=event,
+                payload=payload,
+                prev_hash=prev_hash,
+                hash=node_hash
+            )
+            db.add(entry)
+            db.flush()
+            sp.commit()
+            if commit:
+                db.commit()
+                db.refresh(entry)
+            return entry
+        except IntegrityError:
+            sp.rollback()
+            if attempt == max_retries - 1:
+                raise
 
 
 def verify_audit_chain(db: Session) -> Dict[str, Any]:
