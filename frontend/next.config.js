@@ -7,8 +7,11 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  experimental: {
-    optimizePackageImports: ['lucide-react', 'framer-motion'],
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.cache = false;
+    }
+    return config;
   },
   async rewrites() {
     return [
