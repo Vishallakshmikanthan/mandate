@@ -52,9 +52,24 @@ def init_db():
     from app.models.paypal_action import PayPalAction
     from app.models.user import User
     from app.models.api_key import APIKey
+    from app.models.user_key import UserKey
 
     if settings.APP_ENV in ("demo", "test"):
         Base.metadata.create_all(bind=engine)
+        if db_url.startswith("sqlite"):
+            with engine.connect() as conn:
+                try:
+                    res = conn.exec_driver_sql("PRAGMA table_info(mandates)").fetchall()
+                    existing_cols = {row[1] for row in res}
+                    if "public_key" not in existing_cols:
+                        conn.exec_driver_sql("ALTER TABLE mandates ADD COLUMN public_key VARCHAR(128)")
+                    if "key_id" not in existing_cols:
+                        conn.exec_driver_sql("ALTER TABLE mandates ADD COLUMN key_id VARCHAR(64)")
+                    if "signature_algorithm" not in existing_cols:
+                        conn.exec_driver_sql("ALTER TABLE mandates ADD COLUMN signature_algorithm VARCHAR(32) DEFAULT 'hmac-sha256'")
+                    conn.commit()
+                except Exception:
+                    pass
     else:
         import os
         from alembic.config import Config

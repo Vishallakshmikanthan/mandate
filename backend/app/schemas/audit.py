@@ -22,3 +22,15 @@ class AuditVerifyResponse(BaseModel):
     verified_at: datetime
     broken_link_id: Optional[int] = None
     message: str
+    checkpoint_verified: Optional[bool] = None
+    external_checkpoint: Optional[Dict[str, Any]] = None
+
+
+class AuditCheckpointResponse(BaseModel):
+    checkpoint_id: str
+    head_hash: str
+    record_count: int
+    timestamp: str
+    signature: str
+    public_key: Optional[str] = None
+    algorithm: str

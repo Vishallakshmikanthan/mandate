@@ -17,6 +17,7 @@ from app.models.arbiter import ArbiterVerdictRecord
 from app.models.audit import AuditLog
 from app.models.webhook import WebhookEvent
 from app.models.counterparty import Counterparty
+from app.core.checkpoint import clear_checkpoints_for_testing
 from app.models.spend_ledger import SpendLedger
 from app.models.paypal_action import PayPalAction
 from app.models.user import User
@@ -39,6 +40,7 @@ db_module.SessionLocal = TestingSessionLocal
 
 @pytest.fixture(scope="function")
 def db_session():
+    clear_checkpoints_for_testing()
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     default_cp = Counterparty(
@@ -55,6 +57,7 @@ def db_session():
     finally:
         session.close()
         Base.metadata.drop_all(bind=engine)
+        clear_checkpoints_for_testing()
 
 
 @pytest.fixture(scope="function")
