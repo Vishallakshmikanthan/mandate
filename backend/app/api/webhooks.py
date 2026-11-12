@@ -9,6 +9,7 @@ from app.models.webhook import WebhookEvent
 from app.models.escrow import Escrow
 from app.schemas.escrow import EscrowState
 from app.core.escrow_machine import transition_escrow_state
+from app.core.telemetry import metrics
 
 logger = logging.getLogger("mandate.webhooks")
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
@@ -100,6 +101,7 @@ async def handle_paypal_webhook(request: Request, db: Session = Depends(get_db))
     existing_event = db.query(WebhookEvent).filter(WebhookEvent.event_id == event_id).first()
     if existing_event and existing_event.status == "PROCESSED":
         logger.info("Ignoring duplicate webhook event ID: %s", event_id)
+        metrics.record_webhook(event_type, "duplicate")
         return {"status": "DUPLICATE_IGNORED", "event_id": event_id}
 
     if not existing_event:
@@ -196,9 +198,11 @@ async def handle_paypal_webhook(request: Request, db: Session = Depends(get_db))
         webhook_record.processed_at = datetime.now(timezone.utc)
         webhook_record.error_message = None
         db.commit()
+        metrics.record_webhook(event_type, "processed")
 
     except Exception as exc:
         db.rollback()
+        metrics.record_webhook(event_type, "failed")
         # Record failure state so retry can be traced
         try:
             fail_event = db.query(WebhookEvent).filter(WebhookEvent.event_id == event_id).first()

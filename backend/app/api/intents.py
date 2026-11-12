@@ -18,6 +18,8 @@ from app.core.audit import log_audit_event
 from app.core.stream_broadcaster import emit_timeline_event
 from app.core.spend_ledger import get_mandate_for_update, get_mandate_spend_metrics, record_spend_entry
 from app.paypal.orders import create_paypal_order
+from app.core.telemetry import metrics, intent_id_ctx, mandate_id_ctx
+from app.core.cost_control import cost_controller, LLMCostCapExceededError
 from app.core.auth import (
     get_current_user_or_agent,
     verify_owner_access,
@@ -61,10 +63,10 @@ async def submit_payment_intent(
     now_utc = datetime.now(timezone.utc)
 
     # Compute metrics from ledger (active reserves + settled commits)
-    metrics = get_mandate_spend_metrics(db, mandate.id, now_utc=now_utc)
-    allocated_spend = metrics["allocated_spend_minor"]
-    rolling_24h_spend = metrics["rolling_24h_spend_minor"]
-    txns_in_last_hour = metrics["txns_in_last_hour"]
+    spend_metrics = get_mandate_spend_metrics(db, mandate.id, now_utc=now_utc)
+    allocated_spend = spend_metrics["allocated_spend_minor"]
+    rolling_24h_spend = spend_metrics["rolling_24h_spend_minor"]
+    txns_in_last_hour = spend_metrics["txns_in_last_hour"]
 
     # Look up counterparty in registry
     counterparty_obj = db.query(Counterparty).filter(
@@ -100,6 +102,20 @@ async def submit_payment_intent(
     )
     deterministic_verdict = compute_deterministic_verdict(rule_results)
 
+    # 1b. Check and record LLM cost against mandate daily limit (fail-closed)
+    mandate_id_ctx.set(mandate.id)
+    try:
+        cost_controller.check_and_record_llm_cost(
+            mandate_id=mandate.id,
+            cost_cents=0.5,
+            mandate_policy=mandate.policy
+        )
+    except LLMCostCapExceededError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc)
+        )
+
     # 2. Evaluate AI Risk Scorer
     risk_output = await score_intent_risk(
         counterparty=req.counterparty,
@@ -116,6 +132,7 @@ async def submit_payment_intent(
         risk_recommendation=risk_output.recommendation,
         risk_score=risk_output.risk_score
     )
+    metrics.record_decision(final_decision)
 
     intent = PaymentIntent(
         mandate_id=mandate.id,
@@ -132,6 +149,7 @@ async def submit_payment_intent(
     db.add(intent)
     db.commit()
     db.refresh(intent)
+    intent_id_ctx.set(intent.id)
 
     # Log to tamper-evident audit log
     log_audit_event(

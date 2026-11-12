@@ -5,6 +5,7 @@ from typing import Type, TypeVar, Optional, Any, Dict
 from pydantic import BaseModel, ValidationError
 import httpx
 from app.config import settings
+from app.core.telemetry import metrics
 
 logger = logging.getLogger("mandate.llm")
 
@@ -127,6 +128,10 @@ class MockLLMProvider(LLMProvider):
                     "reasoning": "Intent description and context are standard, compliant, and free of adversarial patterns."
                 }
             latency_ms = (time.perf_counter() - start) * 1000
+            prompt_tokens = max(20, len(system_prompt + user_prompt) // 4)
+            completion_tokens = 60
+            cost_cents = round((prompt_tokens * 0.000075 + completion_tokens * 0.00030) / 100, 4)
+            metrics.record_llm_call(latency_ms, prompt_tokens, completion_tokens, cost_cents)
             logger.info("Mock LLM call (RiskScorer): latency=%.2fms", latency_ms)
             return response_model.model_validate(data)
 
@@ -185,9 +190,15 @@ class MockLLMProvider(LLMProvider):
                     "explanation": "All acceptance criteria fully satisfied with high fidelity."
                 }
             latency_ms = (time.perf_counter() - start) * 1000
+            prompt_tokens = max(20, len(system_prompt + user_prompt) // 4)
+            completion_tokens = 60
+            cost_cents = round((prompt_tokens * 0.000075 + completion_tokens * 0.00030) / 100, 4)
+            metrics.record_llm_call(latency_ms, prompt_tokens, completion_tokens, cost_cents)
             logger.info("Mock LLM call (Arbiter): latency=%.2fms", latency_ms)
             return response_model.model_validate(data)
 
+        latency_ms = (time.perf_counter() - start) * 1000
+        metrics.record_llm_call(latency_ms, 20, 20, 0.001)
         return response_model.model_validate({})
 
 
@@ -233,6 +244,8 @@ class GeminiLLMProvider(LLMProvider):
             try:
                 parsed = self._validate_or_repair_json(raw_text, response_model)
                 latency_ms = (time.perf_counter() - start) * 1000
+                cost_cents = round((prompt_tokens * 0.000010 + completion_tokens * 0.000040) / 100, 4)
+                metrics.record_llm_call(latency_ms, prompt_tokens, completion_tokens, cost_cents)
                 logger.info(
                     "Gemini complete_json success: model=%s latency=%.1fms tokens=%d",
                     self.model, latency_ms, total_tokens
@@ -259,6 +272,8 @@ class GeminiLLMProvider(LLMProvider):
                 retry_text = retry_resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                 parsed = self._validate_or_repair_json(retry_text, response_model)
                 latency_ms = (time.perf_counter() - start) * 1000
+                cost_cents = round((prompt_tokens * 0.000010 + completion_tokens * 0.000040) / 100, 4)
+                metrics.record_llm_call(latency_ms, prompt_tokens, completion_tokens, cost_cents)
                 logger.info("Gemini schema repair succeeded: latency=%.1fms", latency_ms)
                 return parsed
 
@@ -301,11 +316,15 @@ class OpenAILLMProvider(LLMProvider):
             raw_text = data["choices"][0]["message"]["content"]
 
             usage = data.get("usage", {})
-            total_tokens = usage.get("total_tokens", 0)
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
 
             try:
                 parsed = self._validate_or_repair_json(raw_text, response_model)
                 latency_ms = (time.perf_counter() - start) * 1000
+                cost_cents = round((prompt_tokens * 0.000015 + completion_tokens * 0.000060) / 100, 4)
+                metrics.record_llm_call(latency_ms, prompt_tokens, completion_tokens, cost_cents)
                 logger.info("OpenAI complete_json success: model=%s latency=%.1fms tokens=%d", self.model, latency_ms, total_tokens)
                 return parsed
             except (json.JSONDecodeError, ValidationError) as err:
@@ -323,6 +342,9 @@ class OpenAILLMProvider(LLMProvider):
                 retry_resp.raise_for_status()
                 retry_data = retry_resp.json()
                 parsed = self._validate_or_repair_json(retry_data["choices"][0]["message"]["content"], response_model)
+                latency_ms = (time.perf_counter() - start) * 1000
+                cost_cents = round((prompt_tokens * 0.000015 + completion_tokens * 0.000060) / 100, 4)
+                metrics.record_llm_call(latency_ms, prompt_tokens, completion_tokens, cost_cents)
                 return parsed
 
 
@@ -367,11 +389,15 @@ class AnthropicLLMProvider(LLMProvider):
             raw_text = data["content"][0]["text"].strip()
 
             usage = data.get("usage", {})
-            total_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+            prompt_tokens = usage.get("input_tokens", 0)
+            completion_tokens = usage.get("output_tokens", 0)
+            total_tokens = prompt_tokens + completion_tokens
 
             try:
                 parsed = self._validate_or_repair_json(raw_text, response_model)
                 latency_ms = (time.perf_counter() - start) * 1000
+                cost_cents = round((prompt_tokens * 0.000300 + completion_tokens * 0.001500) / 100, 4)
+                metrics.record_llm_call(latency_ms, prompt_tokens, completion_tokens, cost_cents)
                 logger.info("Anthropic complete_json success: model=%s latency=%.1fms tokens=%d", self.model, latency_ms, total_tokens)
                 return parsed
             except (json.JSONDecodeError, ValidationError) as err:
@@ -393,6 +419,9 @@ class AnthropicLLMProvider(LLMProvider):
                 retry_resp.raise_for_status()
                 retry_text = retry_resp.json()["content"][0]["text"].strip()
                 parsed = self._validate_or_repair_json(retry_text, response_model)
+                latency_ms = (time.perf_counter() - start) * 1000
+                cost_cents = round((prompt_tokens * 0.000300 + completion_tokens * 0.001500) / 100, 4)
+                metrics.record_llm_call(latency_ms, prompt_tokens, completion_tokens, cost_cents)
                 return parsed
 
 

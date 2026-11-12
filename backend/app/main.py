@@ -5,13 +5,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db import init_db
-from app.api import mandates, intents, escrows, scenarios, stream, audit, webhooks, agents, counterparties, auth
+from app.api import mandates, intents, escrows, scenarios, stream, audit, webhooks, agents, counterparties, auth, telemetry
+from app.api.middleware import TelemetryMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: initialize database tables
     init_db()
+    from app.core.telemetry import setup_telemetry_logging
+    setup_telemetry_logging()
     if settings.APP_ENV == "prod":
         from app.paypal.client import get_paypal_client
         client = get_paypal_client()
@@ -59,6 +62,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+app.add_middleware(TelemetryMiddleware)
 
 # Mount API Routers
 app.include_router(mandates.router, prefix="/api")
@@ -71,6 +75,7 @@ app.include_router(webhooks.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(counterparties.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(telemetry.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["Health"])

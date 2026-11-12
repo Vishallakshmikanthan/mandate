@@ -24,6 +24,7 @@ from app.models.arbiter import ArbiterVerdictRecord
 from app.models.counterparty import Counterparty
 from app.schemas.escrow import EscrowState
 from app.config import settings
+from app.core.cost_control import cost_controller, NegotiationTurnCapExceededError
 
 logger = logging.getLogger("mandate.orchestrator")
 
@@ -51,10 +52,12 @@ class AgentOrchestrator:
 
         buyer = BuyerAgent(agent_id=mandate.agent_id, mandate_id=mandate.id)
         seller = SellerAgent(agent_id="seller_agent_acme", mode=mode)
+        session_key = f"orch_{self.scenario_name}_{mandate_id}"
 
         # ----------------------------------------------------------------------
         # Turn 1: Buyer Inquires
         # ----------------------------------------------------------------------
+        cost_controller.increment_and_check_turns(session_key)
         await emit_timeline_event(
             scenario=self.scenario_name,
             event_type="AGENT_INQUIRY",
@@ -70,6 +73,7 @@ class AgentOrchestrator:
         # ----------------------------------------------------------------------
         # Turn 2: Seller Quotes / Injects
         # ----------------------------------------------------------------------
+        cost_controller.increment_and_check_turns(session_key)
         quote = seller.respond_to_inquiry(inquiry)
 
         seller_status = "DANGER" if quote["is_injection"] else "INFO"
@@ -86,6 +90,7 @@ class AgentOrchestrator:
         # ----------------------------------------------------------------------
         # Turn 3: Buyer submits Payment Intent to Mandate Gateway
         # ----------------------------------------------------------------------
+        cost_controller.increment_and_check_turns(session_key)
         intent_amount = quote["price_minor"]
         intent_source = quote["message"]
 
@@ -228,6 +233,7 @@ class AgentOrchestrator:
                 }
             )
 
+            cost_controller.reset_session(session_key)
             return {
                 "scenario": self.scenario_name,
                 "intent_id": intent.id,
@@ -451,6 +457,7 @@ class AgentOrchestrator:
                 scenario=self.scenario_name
             )
 
+        cost_controller.reset_session(session_key)
         return {
             "scenario": self.scenario_name,
             "intent_id": intent.id,

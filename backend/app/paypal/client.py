@@ -6,6 +6,7 @@ import random
 from typing import Dict, Any, Optional
 import httpx
 from app.config import settings
+from app.core.telemetry import metrics
 
 logger = logging.getLogger("mandate.paypal")
 
@@ -84,6 +85,7 @@ class PayPalClient:
 
         backoff = 0.05
         client = self._get_client()
+        start_req = time.perf_counter()
 
         for attempt in range(max_retries):
             try:
@@ -111,6 +113,8 @@ class PayPalClient:
                     resp.raise_for_status()
 
                 resp.raise_for_status()
+                latency_ms = (time.perf_counter() - start_req) * 1000
+                metrics.record_paypal_call(path, latency_ms, success=True)
                 if resp.status_code == 204:
                     return {"status": "SUCCESS"}
                 return resp.json()
@@ -122,9 +126,13 @@ class PayPalClient:
                     backoff *= 2
                     continue
                 else:
+                    latency_ms = (time.perf_counter() - start_req) * 1000
+                    metrics.record_paypal_call(path, latency_ms, success=False)
                     logger.error("PayPal API network error on final attempt %s: %s", path, exc)
                     raise
             except httpx.HTTPStatusError as exc:
+                latency_ms = (time.perf_counter() - start_req) * 1000
+                metrics.record_paypal_call(path, latency_ms, success=False)
                 logger.error("PayPal API HTTP error %s: %s", path, exc)
                 raise
 
