@@ -174,3 +174,4 @@ def downgrade() -> None:
     op.drop_table('escrows')
     op.drop_table('payment_intents')
     op.drop_table('mandates')
+

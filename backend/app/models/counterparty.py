@@ -14,3 +14,4 @@ class Counterparty(Base):
     status = Column(String(20), nullable=False, default="UNVERIFIED")  # VERIFIED, UNVERIFIED, BLOCKED, SUSPENDED
     verified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+

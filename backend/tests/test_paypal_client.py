@@ -100,3 +100,4 @@ async def test_paypal_client_same_idempotency_key_sent_on_retry():
     assert len(captured_keys) == 3
     assert all(k == target_key for k in captured_keys)
     await client.close()
+

@@ -27,3 +27,4 @@ def get_operational_alerts(db: Session = Depends(get_db)):
         "total_active_alerts": len(active_alerts),
         "alerts": active_alerts
     }
+

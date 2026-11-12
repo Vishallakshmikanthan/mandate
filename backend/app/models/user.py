@@ -18,3 +18,4 @@ class User(Base):
     role = Column(String(20), default="USER", nullable=False)  # "USER", "ADMIN"
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+

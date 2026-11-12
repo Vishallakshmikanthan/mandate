@@ -158,3 +158,4 @@ def test_audit_api_checkpoint_and_verify_endpoints(client, db_session):
     assert verify_data["valid"] is True
     assert verify_data["checkpoint_verified"] is True
     assert verify_data["external_checkpoint"]["checkpoint_id"] == chk_data["checkpoint_id"]
+

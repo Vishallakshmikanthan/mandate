@@ -143,3 +143,4 @@ async def test_eval_redteam_e2e_dataset_metrics():
     })
     assert "Mandate Red-Team Benchmark Results" in table_str
     assert "Red-Team Held-Out" in table_str
+

@@ -143,3 +143,4 @@ async def test_stream_broadcaster_local_fallback_when_redis_unavailable():
     msg = await asyncio.wait_for(q.get(), timeout=1.0)
     assert "Local event without Redis" in msg
     bc.unsubscribe(q)
+

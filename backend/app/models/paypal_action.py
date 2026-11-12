@@ -20,3 +20,4 @@ class PayPalAction(Base):
     response_body = Column(JSON, nullable=True)
     status = Column(String, default="PENDING", nullable=False)  # PENDING, COMPLETED, FAILED
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+

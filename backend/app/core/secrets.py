@@ -36,3 +36,4 @@ def get_secret(key: str, default: Optional[str] = None) -> Optional[str]:
             logger.warning(f"Failed to fetch secret '{key}' from AWS Secrets Manager: {e}")
 
     return default
+

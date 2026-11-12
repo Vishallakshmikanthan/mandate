@@ -296,3 +296,4 @@ def verify_seller_deliver_permission(escrow_counterparty: str, auth: AuthContext
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Forbidden: API key is bound to counterparty '{auth.counterparty_handle}', cannot deliver for '{escrow_counterparty}'."
         )
+

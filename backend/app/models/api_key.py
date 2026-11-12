@@ -28,3 +28,4 @@ class APIKey(Base):
 
     owner = relationship("User")
     mandate = relationship("Mandate")
+

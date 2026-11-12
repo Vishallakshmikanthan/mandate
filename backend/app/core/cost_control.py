@@ -109,3 +109,4 @@ class CostController:
 
 # Global singleton instance
 cost_controller = CostController()
+

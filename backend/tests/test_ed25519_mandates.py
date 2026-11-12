@@ -329,3 +329,4 @@ def test_mandate_creation_with_another_users_key_rejected(client, db_session, te
     # Must be rejected with 403 Forbidden
     assert resp.status_code == 403
     assert "belongs to another user" in resp.json()["detail"]
+

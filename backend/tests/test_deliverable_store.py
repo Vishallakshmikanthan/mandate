@@ -120,3 +120,4 @@ def test_virus_scan_hook_detects_malicious_file():
     assert inspection.is_inspectable is False
     assert inspection.inspection_status == "MALICIOUS"
     assert "Malicious payload" in inspection.warning
+

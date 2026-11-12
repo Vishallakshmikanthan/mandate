@@ -15,3 +15,4 @@ class RedTeamRun(Base):
     block_rate_pct = Column(Float, nullable=False, default=0.0)
     results = Column(JSON, nullable=False, default=list)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+

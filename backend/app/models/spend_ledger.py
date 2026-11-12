@@ -13,3 +13,4 @@ class SpendLedger(Base):
     amount_minor = Column(Integer, nullable=False)
     kind = Column(String(20), nullable=False)  # RESERVE, COMMIT, RELEASE
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+

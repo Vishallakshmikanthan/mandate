@@ -246,3 +246,4 @@ def test_webhook_failure_rolls_back_and_marks_failed(client, sample_mandate, db_
         assert wh is not None
         assert wh.status == "FAILED"
         assert "Simulated DB error" in wh.error_message
+

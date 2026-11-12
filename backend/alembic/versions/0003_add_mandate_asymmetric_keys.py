@@ -52,3 +52,4 @@ def downgrade() -> None:
         batch_op.drop_column('signature_algorithm')
         batch_op.drop_column('key_id')
         batch_op.drop_column('public_key')
+

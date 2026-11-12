@@ -118,3 +118,4 @@ def get_mandate_spend_metrics(
         "rolling_24h_spend_minor": rolling_24h_spend,
         "txns_in_last_hour": txns_in_last_hour,
     }
+

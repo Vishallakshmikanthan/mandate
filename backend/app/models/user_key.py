@@ -24,3 +24,4 @@ class UserKey(Base):
     __table_args__ = (
         Index("ix_user_keys_user_status", "user_id", "status"),
     )
+

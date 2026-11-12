@@ -36,3 +36,4 @@ def downgrade() -> None:
         batch_op.drop_column('file_size_bytes')
         batch_op.drop_column('file_name')
         batch_op.drop_column('sha256')
+
