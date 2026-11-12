@@ -32,6 +32,8 @@ class ArbiterVerdictOutput(BaseModel):
     criteria_results: List[CriterionResult] = Field(default_factory=list)
     partial_ratio: float = Field(0.0, ge=0.0, le=1.0, description="Fraction of funds to release if PARTIAL")
     explanation: str = Field(..., description="Summary explanation of the verdict")
+    model: str = Field("mock", description="Model name that generated the verdict")
+    prompt_version: str = Field("arbiter_v1.0", description="Prompt version used")
 
 
 class DeliverableCreate(BaseModel):
@@ -58,6 +60,7 @@ class ArbiterVerdictResponse(BaseModel):
     explanation: str
     partial_ratio: float
     model: str
+    prompt_version: Optional[str] = "arbiter_v1.0"
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

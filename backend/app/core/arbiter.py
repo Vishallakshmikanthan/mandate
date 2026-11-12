@@ -36,6 +36,8 @@ async def evaluate_deliverable_arbitration(
             user_prompt=user_prompt,
             response_model=ArbiterVerdictOutput
         )
+        verdict_output.model = getattr(provider, "model_name", "mock")
+        verdict_output.prompt_version = "arbiter_v1.0"
     except Exception as exc:
         logger.error("Arbiter evaluation failed, defaulting to NEEDS_HUMAN: %s", exc)
         return ArbiterVerdictOutput(
@@ -43,7 +45,9 @@ async def evaluate_deliverable_arbitration(
             confidence=0.0,
             criteria_results=[],
             partial_ratio=0.0,
-            explanation=f"Arbiter automated evaluation encountered an error ({type(exc).__name__}). Escalated for human adjudication."
+            explanation=f"Arbiter automated evaluation encountered an error ({type(exc).__name__}). Escalated for human adjudication.",
+            model=getattr(provider, "model_name", "mock"),
+            prompt_version="arbiter_v1.0"
         )
 
     # Enforce confidence cutoff rule

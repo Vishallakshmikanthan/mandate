@@ -132,7 +132,8 @@ async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
         criteria_results=[c.model_dump() for c in verdict_output.criteria_results],
         explanation=verdict_output.explanation,
         partial_ratio=verdict_output.partial_ratio,
-        model="arbiter-core-v1"
+        model=verdict_output.model,
+        prompt_version=verdict_output.prompt_version
     )
     db.add(verdict_rec)
     db.commit()

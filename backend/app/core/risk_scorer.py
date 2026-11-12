@@ -16,6 +16,8 @@ class RiskScoreOutput(BaseModel):
     flags: List[str] = Field(default_factory=list)
     recommendation: str = Field(..., description="ALLOW, ESCALATE, or BLOCK")
     reasoning: str
+    model_name: str = "mock"
+    prompt_version: str = "risk_scorer_v1.0"
 
 
 # Comprehensive adversarial injection patterns
@@ -121,6 +123,8 @@ async def score_intent_risk(
             user_prompt=user_prompt,
             response_model=RiskScoreOutput
         )
+        output.model_name = getattr(provider, "model_name", "mock")
+        output.prompt_version = "risk_scorer_v1.0"
     except Exception as exc:
         logger.error("LLM Risk Scorer failed, failing closed: %s", exc)
         # Fail-closed principle: if LLM fails, block or escalate
@@ -128,7 +132,9 @@ async def score_intent_risk(
             risk_score=0.85,
             flags=["llm_evaluation_failed", "fail_closed_active"],
             recommendation="BLOCK",
-            reasoning=f"LLM risk scoring failed ({type(exc).__name__}). System failed closed for security."
+            reasoning=f"LLM risk scoring failed ({type(exc).__name__}). System failed closed for security.",
+            model_name=getattr(provider, "model_name", "mock"),
+            prompt_version="risk_scorer_v1.0"
         )
 
     # If deterministic pre-filter detected injection, guarantee it overrides to BLOCK
@@ -138,7 +144,9 @@ async def score_intent_risk(
             risk_score=max(output.risk_score, prefilter_score),
             flags=combined_flags,
             recommendation="BLOCK",
-            reasoning=f"Deterministic injection pre-filter triggered: {', '.join(prefilter_flags)}. {output.reasoning}"
+            reasoning=f"Deterministic injection pre-filter triggered: {', '.join(prefilter_flags)}. {output.reasoning}",
+            model_name=getattr(provider, "model_name", "mock"),
+            prompt_version="risk_scorer_v1.0"
         )
 
     return output

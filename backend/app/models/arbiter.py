@@ -15,7 +15,8 @@ class ArbiterVerdictRecord(Base):
     criteria_results = Column(JSON, nullable=False, default=list)
     explanation = Column(Text, nullable=False)
     partial_ratio = Column(Float, nullable=False, default=0.0)
-    model = Column(String(50), nullable=False, default="arbiter-core-v1")
+    model = Column(String(50), nullable=False, default="mock")
+    prompt_version = Column(String(50), nullable=True, default="arbiter_v1.0")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     escrow = relationship("Escrow", backref="verdicts")

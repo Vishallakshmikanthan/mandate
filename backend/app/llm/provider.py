@@ -12,6 +12,7 @@ T = TypeVar("T", bound=BaseModel)
 
 class LLMProvider:
     """Base LLM Provider Interface."""
+    model_name: str = "unknown"
 
     async def complete_json(
         self,
@@ -28,6 +29,7 @@ class MockLLMProvider(LLMProvider):
     Enables reliable, zero-latency, zero-cost execution for tests,
     offline demos, and CI without external dependencies.
     """
+    model_name: str = "mock"
 
     async def complete_json(
         self,
@@ -128,6 +130,7 @@ class GeminiLLMProvider(LLMProvider):
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
         self.api_key = api_key
         self.model = model
+        self.model_name = model
         self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     async def complete_json(
@@ -160,6 +163,7 @@ class OpenAILLMProvider(LLMProvider):
     def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
         self.api_key = api_key
         self.model = model
+        self.model_name = model
         self.url = "https://api.openai.com/v1/chat/completions"
 
     async def complete_json(
@@ -190,6 +194,51 @@ class OpenAILLMProvider(LLMProvider):
             return response_model.model_validate(parsed_json)
 
 
+class AnthropicLLMProvider(LLMProvider):
+    """Anthropic Claude API Provider with JSON parsing."""
+
+    def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20241022"):
+        self.api_key = api_key
+        self.model = model
+        self.model_name = model
+        self.url = "https://api.anthropic.com/v1/messages"
+
+    async def complete_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: Type[T]
+    ) -> T:
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+        prompt_with_instruction = f"{user_prompt}\n\nIMPORTANT: Respond with valid, raw JSON ONLY. No markdown, no triple backticks."
+        payload = {
+            "model": self.model,
+            "max_tokens": 2048,
+            "temperature": 0.0,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": prompt_with_instruction}]
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(self.url, headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            raw_text = data["content"][0]["text"].strip()
+            # Strip markdown codeblocks if model added them
+            if raw_text.startswith("```"):
+                lines = raw_text.splitlines()
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                raw_text = "\n".join(lines).strip()
+            parsed_json = json.loads(raw_text)
+            return response_model.model_validate(parsed_json)
+
+
 def get_llm_provider() -> LLMProvider:
     """Factory function returning the active LLM provider."""
     provider_type = settings.LLM_PROVIDER.lower()
@@ -200,5 +249,7 @@ def get_llm_provider() -> LLMProvider:
         return GeminiLLMProvider(api_key=settings.LLM_API_KEY, model=settings.LLM_MODEL)
     elif provider_type == "openai":
         return OpenAILLMProvider(api_key=settings.LLM_API_KEY, model=settings.LLM_MODEL)
+    elif provider_type == "anthropic":
+        return AnthropicLLMProvider(api_key=settings.LLM_API_KEY, model=settings.LLM_MODEL)
 
     return MockLLMProvider()

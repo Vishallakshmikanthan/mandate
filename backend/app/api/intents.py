@@ -111,6 +111,8 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
             "mandate_id": mandate.id,
             "decision": final_decision,
             "risk_score": risk_output.risk_score,
+            "model_name": risk_output.model_name,
+            "prompt_version": risk_output.prompt_version,
             "rule_results": [r.model_dump() for r in rule_results],
             "reason": decision_reason
         }
