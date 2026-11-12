@@ -11,8 +11,9 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=8000
+      - APP_ENV=${APP_ENV:-demo}
       - DATABASE_URL=sqlite:///./mandate.db
-      - MANDATE_SIGNING_KEY=mandate_super_secure_secret_signing_key_32_bytes_min!
+      - MANDATE_SIGNING_KEY=${MANDATE_SIGNING_KEY}
       - PAYPAL_SIMULATION_MODE=true
       - LLM_PROVIDER=mock
       - DEMO_REPLAY_MODE=false

@@ -37,3 +37,22 @@ def test_wrong_key_fails_verification(sample_policy):
 def test_empty_signature_fails():
     assert verify_mandate_signature({"a": 1}, "", SECRET_KEY) is False
     assert verify_mandate_signature({"a": 1}, None, SECRET_KEY) is False
+
+
+def test_app_env_prod_refuses_default_key():
+    from app.config import Settings
+    default_key = "mandate_super_secure_secret_signing_key_32_bytes_min!"
+
+    # In prod with default key -> must raise ValueError
+    with pytest.raises(ValueError, match="cannot be the default insecure key"):
+        Settings(APP_ENV="prod", MANDATE_SIGNING_KEY=default_key)
+
+    # In dev with short key -> must raise ValueError
+    with pytest.raises(ValueError, match="must be at least 32 bytes long"):
+        Settings(APP_ENV="dev", MANDATE_SIGNING_KEY="too_short_key")
+
+    # In prod with secure 32+ byte key -> succeeds
+    valid_key = "a" * 32
+    s = Settings(APP_ENV="prod", MANDATE_SIGNING_KEY=valid_key)
+    assert s.APP_ENV == "prod"
+    assert s.MANDATE_SIGNING_KEY == valid_key

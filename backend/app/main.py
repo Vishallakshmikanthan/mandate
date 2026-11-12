@@ -22,19 +22,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Middleware
-origins = [
-    settings.FRONTEND_ORIGIN,
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "*"
-]
+# CORS Middleware: explicit allowed origins without wildcard
+raw_origins = [o.strip() for o in settings.FRONTEND_ORIGIN.split(",") if o.strip()]
+origins = []
+for o in raw_origins + ["http://localhost:3000", "http://127.0.0.1:3000"]:
+    if o and o != "*" and o not in origins:
+        origins.append(o)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
 
@@ -55,6 +54,7 @@ def health_check():
     return {
         "status": "healthy",
         "service": "mandate-gateway",
+        "app_env": settings.APP_ENV,
         "version": "1.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "database": "sqlite" if settings.DATABASE_URL.startswith("sqlite") else "postgresql",
