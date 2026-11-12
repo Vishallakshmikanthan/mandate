@@ -1,4 +1,5 @@
 import { demoStore, MandateItem, PaymentIntentItem, EscrowItem, AuditRecord, Agent } from "./demo-store";
+import { getAuthToken } from "./auth";
 
 export const isDemoMode = (): boolean => {
   return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
@@ -13,9 +14,28 @@ const getApiBase = (): string => {
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 };
 
+export const getAuthHeaders = (): Record<string, string> => {
+  const token = getAuthToken();
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+};
+
+async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const headers = {
+    ...getAuthHeaders(),
+    ...(options.headers || {}),
+  };
+  return fetch(`${getApiBase()}${path}`, {
+    ...options,
+    headers,
+  });
+}
+
 export async function fetchHealth() {
   try {
-    const res = await fetch(`${getApiBase()}/api/health`, { cache: "no-store" });
+    const res = await apiFetch(`/api/health`, { cache: "no-store" });
     if (!res.ok) throw new Error("Health check failed");
     return await res.json();
   } catch (err) {
@@ -35,7 +55,7 @@ export async function fetchHealth() {
 
 export async function fetchMandates(): Promise<MandateItem[]> {
   try {
-    const res = await fetch(`${getApiBase()}/api/mandates`, { cache: "no-store" });
+    const res = await apiFetch(`/api/mandates`, { cache: "no-store" });
     if (!res.ok) throw new Error(`Failed to fetch mandates: ${res.statusText}`);
     const data = await res.json();
     if (data && data.length > 0) return data;
@@ -47,7 +67,7 @@ export async function fetchMandates(): Promise<MandateItem[]> {
 
 export async function fetchMandate(mandateId: string): Promise<MandateItem | null> {
   try {
-    const res = await fetch(`${getApiBase()}/api/mandates/${mandateId}`, { cache: "no-store" });
+    const res = await apiFetch(`/api/mandates/${mandateId}`, { cache: "no-store" });
     if (!res.ok) {
       if (res.status === 404 && isDemoMode()) {
         return demoStore.getMandates().find((m) => m.id === mandateId) || null;
@@ -62,7 +82,7 @@ export async function fetchMandate(mandateId: string): Promise<MandateItem | nul
 
 export async function createMandate(payload: any): Promise<MandateItem> {
   try {
-    const res = await fetch(`${getApiBase()}/api/mandates`, {
+    const res = await apiFetch(`/api/mandates`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -100,7 +120,7 @@ export async function createMandate(payload: any): Promise<MandateItem> {
 
 export async function revokeMandate(mandateId: string): Promise<any> {
   try {
-    const res = await fetch(`${getApiBase()}/api/mandates/${mandateId}/revoke`, { method: "POST" });
+    const res = await apiFetch(`/api/mandates/${mandateId}/revoke`, { method: "POST" });
     if (res.ok) {
       if (isDemoMode()) demoStore.revokeMandate(mandateId);
       return await res.json();
@@ -117,7 +137,7 @@ export async function revokeMandate(mandateId: string): Promise<any> {
 
 export async function fetchOwnerKeys(): Promise<any[]> {
   try {
-    const res = await fetch(`${getApiBase()}/api/auth/keys`, { cache: "no-store" });
+    const res = await apiFetch(`/api/auth/keys`, { cache: "no-store" });
     if (res.ok) return await res.json();
     return [];
   } catch (err) {
@@ -127,7 +147,7 @@ export async function fetchOwnerKeys(): Promise<any[]> {
 
 export async function generateOwnerKeyPair(keyId?: string): Promise<any> {
   try {
-    const res = await fetch(`${getApiBase()}/api/auth/keys/generate`, {
+    const res = await apiFetch(`/api/auth/keys/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(keyId ? { key_id: keyId } : {}),
@@ -149,7 +169,7 @@ export async function rotateMandateKey(
   mandateId: string,
   payload: { new_key_id: string; new_public_key: string; new_signature: string }
 ): Promise<MandateItem> {
-  const res = await fetch(`${getApiBase()}/api/mandates/${mandateId}/rotate-key`, {
+  const res = await apiFetch(`/api/mandates/${mandateId}/rotate-key`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -160,7 +180,7 @@ export async function rotateMandateKey(
 
 export async function fetchPayments(): Promise<PaymentIntentItem[]> {
   try {
-    const res = await fetch(`${getApiBase()}/api/intents`, { cache: "no-store" });
+    const res = await apiFetch(`/api/intents`, { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch intents");
     const data = await res.json();
     if (data && data.length > 0) return data;
@@ -172,7 +192,7 @@ export async function fetchPayments(): Promise<PaymentIntentItem[]> {
 
 export async function fetchPayment(paymentId: string): Promise<PaymentIntentItem | null> {
   try {
-    const res = await fetch(`${getApiBase()}/api/intents/${paymentId}`, { cache: "no-store" });
+    const res = await apiFetch(`/api/intents/${paymentId}`, { cache: "no-store" });
     if (!res.ok) {
       if (res.status === 404 && isDemoMode()) {
         return demoStore.getPayments().find((p) => p.id === paymentId) || null;
@@ -187,7 +207,7 @@ export async function fetchPayment(paymentId: string): Promise<PaymentIntentItem
 
 export async function fetchEscrows(): Promise<EscrowItem[]> {
   try {
-    const res = await fetch(`${getApiBase()}/api/escrows`, { cache: "no-store" });
+    const res = await apiFetch(`/api/escrows`, { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch escrows");
     const data = await res.json();
     if (data && data.length > 0) return data;
@@ -199,7 +219,7 @@ export async function fetchEscrows(): Promise<EscrowItem[]> {
 
 export async function fetchEscrow(escrowId: string): Promise<EscrowItem | null> {
   try {
-    const res = await fetch(`${getApiBase()}/api/escrows/${escrowId}`, { cache: "no-store" });
+    const res = await apiFetch(`/api/escrows/${escrowId}`, { cache: "no-store" });
     if (!res.ok) {
       if (res.status === 404 && isDemoMode()) {
         return demoStore.getEscrows().find((e) => e.id === escrowId) || null;
@@ -213,13 +233,13 @@ export async function fetchEscrow(escrowId: string): Promise<EscrowItem | null> 
 }
 
 export async function arbitrateEscrow(escrowId: string): Promise<any> {
-  const res = await fetch(`${getApiBase()}/api/escrows/${escrowId}/arbitrate`, { method: "POST" });
+  const res = await apiFetch(`/api/escrows/${escrowId}/arbitrate`, { method: "POST" });
   if (!res.ok) throw new Error(`Arbitration failed: ${res.statusText}`);
   return await res.json();
 }
 
 export async function humanDecisionEscrow(escrowId: string, action: string, notes: string = ""): Promise<any> {
-  const res = await fetch(`${getApiBase()}/api/escrows/${escrowId}/human-decision`, {
+  const res = await apiFetch(`/api/escrows/${escrowId}/human-decision`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, notes }),
@@ -229,7 +249,7 @@ export async function humanDecisionEscrow(escrowId: string, action: string, note
 }
 
 export async function approvalReturnEscrow(escrowId: string): Promise<any> {
-  const res = await fetch(`${getApiBase()}/api/escrows/${escrowId}/approval-return`, { method: "GET" });
+  const res = await apiFetch(`/api/escrows/${escrowId}/approval-return`, { method: "GET" });
   if (!res.ok) {
     const errData = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(errData.detail || "Approval return verification failed");
@@ -239,7 +259,7 @@ export async function approvalReturnEscrow(escrowId: string): Promise<any> {
 
 export async function fetchAuditLogs(): Promise<AuditRecord[]> {
   try {
-    const res = await fetch(`${getApiBase()}/api/audit`, { cache: "no-store" });
+    const res = await apiFetch(`/api/audit`, { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch audit");
     const data = await res.json();
     if (data && data.length > 0) return data;
@@ -250,14 +270,14 @@ export async function fetchAuditLogs(): Promise<AuditRecord[]> {
 }
 
 export async function verifyAudit(): Promise<{ valid: boolean; total_events: number; head_hash: string; message: string }> {
-  const res = await fetch(`${getApiBase()}/api/audit/verify`, { cache: "no-store" });
+  const res = await apiFetch(`/api/audit/verify`, { cache: "no-store" });
   if (!res.ok) throw new Error("Audit verification failed");
   return await res.json();
 }
 
 export async function fetchAgents(): Promise<Agent[]> {
   try {
-    const res = await fetch(`${getApiBase()}/api/agents`, { cache: "no-store" });
+    const res = await apiFetch(`/api/agents`, { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch agents");
     const data = await res.json();
     if (data && data.length > 0) return data;
@@ -269,7 +289,7 @@ export async function fetchAgents(): Promise<Agent[]> {
 
 export async function fetchAgent(agentId: string): Promise<Agent | null> {
   try {
-    const res = await fetch(`${getApiBase()}/api/agents/${agentId}`, { cache: "no-store" });
+    const res = await apiFetch(`/api/agents/${agentId}`, { cache: "no-store" });
     if (!res.ok) {
       if (res.status === 404 && isDemoMode()) {
         return demoStore.getAgents().find((a) => a.id === agentId) || null;
@@ -283,7 +303,7 @@ export async function fetchAgent(agentId: string): Promise<Agent | null> {
 }
 
 export async function runScenarioApi(scenarioKey: string): Promise<any> {
-  const res = await fetch(`${getApiBase()}/api/scenarios/${scenarioKey}/run`, { method: "POST" });
+  const res = await apiFetch(`/api/scenarios/${scenarioKey}/run`, { method: "POST" });
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(`Scenario failed (${res.status}): ${errorText}`);
@@ -292,13 +312,13 @@ export async function runScenarioApi(scenarioKey: string): Promise<any> {
 }
 
 export async function fetchRedTeamStats(): Promise<any> {
-  const res = await fetch(`${getApiBase()}/api/scenarios/redteam/stats`, { cache: "no-store" });
+  const res = await apiFetch(`/api/scenarios/redteam/stats`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch red team stats");
   return await res.json();
 }
 
 export async function runRedTeamApi(): Promise<any> {
-  const res = await fetch(`${getApiBase()}/api/scenarios/red_team/run`, { method: "POST" });
+  const res = await apiFetch(`/api/scenarios/red_team/run`, { method: "POST" });
   if (!res.ok) throw new Error("Failed to run red team suite");
   return await res.json();
 }
