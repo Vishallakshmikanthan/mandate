@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import FastAPI
@@ -16,8 +17,21 @@ async def lifespan(app: FastAPI):
         client = get_paypal_client()
         if not client.simulation_mode and not settings.PAYPAL_WEBHOOK_ID:
             raise ValueError("PAYPAL_WEBHOOK_ID must be configured in production (APP_ENV=prod) when not in simulation mode.")
-    yield
-    # Shutdown logic if needed
+
+    expiry_task = None
+    if settings.APP_ENV != "test":
+        from app.core.expiry import run_expiry_loop
+        expiry_task = asyncio.create_task(run_expiry_loop(interval_seconds=60))
+
+    try:
+        yield
+    finally:
+        if expiry_task and not expiry_task.done():
+            expiry_task.cancel()
+            try:
+                await expiry_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(

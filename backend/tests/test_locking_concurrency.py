@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 import concurrent.futures
 from unittest.mock import AsyncMock, patch
@@ -68,7 +69,11 @@ def test_invalid_human_decision_state_returns_409(client, sample_mandate, db_ses
     assert "Cannot approve escrow in state RELEASED" in resp.json()["detail"]
 
 
-def test_concurrent_arbitration_calls_single_capture_and_valid_audit(client, sample_mandate, db_session):
+@pytest.mark.asyncio
+async def test_concurrent_arbitration_calls_single_capture_and_valid_audit(client, sample_mandate, db_session):
+    import httpx
+    from app.main import app
+
     intent = PaymentIntent(
         mandate_id=sample_mandate.id,
         counterparty="seller_agent_acme",
@@ -116,13 +121,12 @@ def test_concurrent_arbitration_calls_single_capture_and_valid_audit(client, sam
     with patch("app.api.escrows.evaluate_deliverable_arbitration", AsyncMock(return_value=mock_verdict)), \
          patch("app.api.escrows.capture_paypal_authorization", side_effect=mock_capture):
 
-        def call_arbitrate():
-            return client.post(f"/api/escrows/{escrow.id}/arbitrate")
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as ac:
+            async def call_arbitrate():
+                return await ac.post(f"/api/escrows/{escrow.id}/arbitrate")
 
-        # Fire 10 concurrent requests
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [executor.submit(call_arbitrate) for _ in range(10)]
-            responses = [f.result() for f in futures]
+            # Fire 10 concurrent requests
+            responses = await asyncio.gather(*[call_arbitrate() for _ in range(10)])
 
         status_codes = [r.status_code for r in responses]
 

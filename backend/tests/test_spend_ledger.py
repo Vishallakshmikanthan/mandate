@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 import concurrent.futures
 from datetime import datetime, timezone, timedelta
@@ -39,26 +40,29 @@ def create_budget_mandate(db_session, total_budget_minor=20000, per_txn_minor=50
     return mandate
 
 
-def test_concurrent_intents_respect_budget_cap(client, db_session):
+@pytest.mark.asyncio
+async def test_concurrent_intents_respect_budget_cap(client, db_session):
     # Total budget $200 (20000 minor units).
     # Each intent is $50 (5000 minor units).
     # Exactly 4 intents (4 * 50 = $200) can be approved; the other 16 must be blocked.
     mandate = create_budget_mandate(db_session, total_budget_minor=20000, per_txn_minor=5000)
 
-    def submit_intent(i):
-        payload = {
-            "mandate_id": mandate.id,
-            "counterparty": "seller_agent_acme",
-            "merchant_category": "freelance_design",
-            "amount_minor": 5000,
-            "currency": "USD",
-            "description": f"Design service task {i}"
-        }
-        return client.post("/api/intents", json=payload)
+    import httpx
+    from app.main import app
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(submit_intent, i) for i in range(20)]
-        responses = [f.result() for f in futures]
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as ac:
+        async def submit_intent(i):
+            payload = {
+                "mandate_id": mandate.id,
+                "counterparty": "seller_agent_acme",
+                "merchant_category": "freelance_design",
+                "amount_minor": 5000,
+                "currency": "USD",
+                "description": f"Design service task {i}"
+            }
+            return await ac.post("/api/intents", json=payload)
+
+        responses = await asyncio.gather(*[submit_intent(i) for i in range(20)])
 
     decisions = [r.json().get("decision") for r in responses]
 

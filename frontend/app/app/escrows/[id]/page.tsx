@@ -142,6 +142,21 @@ export default function EscrowDetailPage() {
   const amountMinor = escrow.amount_minor || escrow.spec?.amount_minor || 12000;
   const isSettled = escrow.state === "RELEASED" || escrow.state === "SETTLED";
   const isVoided = escrow.state === "REFUNDED" || escrow.state === "VOIDED";
+  const isExpired = escrow.state === "EXPIRED";
+
+  const formatExpiry = (expiresAtStr?: string) => {
+    if (!expiresAtStr) return null;
+    const exp = new Date(expiresAtStr).getTime();
+    const now = Date.now();
+    const diffMs = exp - now;
+    if (diffMs <= 0) return "Hold Expired";
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    if (days > 0) return `${days}d ${hours}h left`;
+    if (hours > 0) return `${hours}h ${mins}m left`;
+    return `${mins}m left`;
+  };
 
   const latestVerdict = escrow.verdicts && escrow.verdicts.length > 0 ? escrow.verdicts[escrow.verdicts.length - 1] : escrow.verdict;
   const criteriaResults = latestVerdict?.criteria_results || [
@@ -168,29 +183,40 @@ export default function EscrowDetailPage() {
 
         {/* Action Buttons on Right */}
         <div className="flex items-center gap-3">
-          <span className="px-3.5 py-1.5 rounded-full text-xs text-neutral-300 bg-white/[0.04] border border-white/[0.08]">
+          <span className={`px-3.5 py-1.5 rounded-full text-xs font-mono border ${
+            isExpired
+              ? "text-amber-400 bg-amber-400/10 border-amber-400/30"
+              : isSettled
+              ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/30"
+              : isVoided
+              ? "text-rose-300 bg-rose-500/10 border-rose-500/30"
+              : "text-neutral-300 bg-white/[0.04] border-white/[0.08]"
+          }`}>
             {escrow.state}
           </span>
 
           <button
             onClick={() => handleHumanDecision(isSettled ? "REJECT" : "APPROVE")}
-            className="px-4 py-2 rounded-full text-xs font-normal text-neutral-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition"
+            disabled={isExpired}
+            className="px-4 py-2 rounded-full text-xs font-normal text-neutral-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Human {isSettled ? "refund" : "override release"}
           </button>
 
           <button
             onClick={handleRunArbiter}
-            disabled={isArbitrating || isSettled || isVoided}
+            disabled={isArbitrating || isSettled || isVoided || isExpired}
             className={`px-5 py-2 rounded-full text-xs font-semibold transition shadow-sm ${
               isSettled
                 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                 : isVoided
                 ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                : isExpired
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-not-allowed"
                 : "bg-white text-neutral-900 hover:bg-neutral-100"
             }`}
           >
-            {isArbitrating ? "Arbitrating..." : isSettled ? "Released ✓" : isVoided ? "Voided" : "Run arbiter"}
+            {isArbitrating ? "Arbitrating..." : isSettled ? "Released ✓" : isVoided ? "Voided" : isExpired ? "Hold Expired" : "Run arbiter"}
           </button>
         </div>
       </div>
@@ -198,6 +224,24 @@ export default function EscrowDetailPage() {
       {actionMessage && (
         <div className="p-3 rounded-xl bg-white/[0.06] border border-white/[0.1] text-xs font-mono text-cyan-300">
           {actionMessage}
+        </div>
+      )}
+
+      {/* Expired State Alert Banner */}
+      {isExpired && (
+        <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+              <h3 className="text-sm font-medium text-amber-200">PayPal Authorization Hold Expired</h3>
+            </div>
+            <p className="text-xs text-neutral-300">
+              The 29-day authorization hold has elapsed without settlement. The reserved budget of {formatMoney(amountMinor)} has been automatically released back to the buyer mandate.
+            </p>
+          </div>
+          <div className="text-xs font-mono text-amber-300 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40">
+            BUDGET RESTORED
+          </div>
         </div>
       )}
 
@@ -307,10 +351,18 @@ export default function EscrowDetailPage() {
             </div>
           </div>
 
-          <p className="text-xs text-neutral-400 font-normal">
-            PayPal Order: <span className="font-mono text-neutral-300">{escrow.paypal_order_id || "Simulated"}</span> · 
-            Auth ID: <span className="font-mono text-neutral-300">{escrow.paypal_authorization_id || "None"}</span>
-          </p>
+          <div className="space-y-1">
+            <p className="text-xs text-neutral-400 font-normal">
+              PayPal Order: <span className="font-mono text-neutral-300">{escrow.paypal_order_id || "Simulated"}</span> · 
+              Auth ID: <span className="font-mono text-neutral-300">{escrow.paypal_authorization_id || "None"}</span>
+            </p>
+            {escrow.hold_expires_at && (
+              <p className="text-xs text-neutral-400 font-normal">
+                Hold Expiry: <span className="font-mono text-amber-300">{formatExpiry(escrow.hold_expires_at)}</span>
+                <span className="text-neutral-500 ml-1">({new Date(escrow.hold_expires_at).toLocaleDateString()})</span>
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Right: Arbiter verdict Card */}

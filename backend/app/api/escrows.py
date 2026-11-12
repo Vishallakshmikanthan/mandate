@@ -527,3 +527,17 @@ async def trigger_escrow_reconciliation(
     from app.core.reconciler import reconcile_stuck_escrows
     results = await reconcile_stuck_escrows(db, max_age_minutes=max_age_minutes)
     return {"status": "SUCCESS", "reconciled_count": len(results), "details": results}
+
+
+@router.post("/check-expiry")
+async def trigger_check_expiry(
+    warn_threshold_hours: int = 24,
+    db: Session = Depends(get_db)
+):
+    """
+    Expiry trigger: checks for escrows whose PayPal hold_expires_at has passed,
+    moves them to EXPIRED, voids authorization, and releases reserved budget.
+    """
+    from app.core.expiry import process_expired_escrows
+    results = await process_expired_escrows(db, warn_threshold_hours=warn_threshold_hours)
+    return {"status": "SUCCESS", "expired_count": len(results), "details": results}
