@@ -1,64 +1,64 @@
-# Mandate Compliance & Payment Architecture Notes
+# Mandate Legal & Regulatory Compliance Framework
 
-> **Disclaimer:** This document is for technical and architectural informational purposes only and does not constitute legal, financial, or regulatory compliance advice. Consult qualified legal counsel before conducting live commercial transactions or operating in production with real customer funds.
-
----
-
-## 1. Fund Custody & Flow of Funds
-
-### Mandate Never Holds or Custodies Funds
-- **Non-Custodial Architecture:** Mandate does not act as a money transmitter or escrow agent under state/federal money transmitter laws (MTL). Mandate never receives, holds, transmits, or possesses funds at any time.
-- **PayPal Escrow/Authorization:** All authorizations, escrow holds, dispute resolutions, and settlements are executed directly through **PayPal (Orders v2 / Payments v2)**.
-- **Agent Capability Boundaries:** Buyer autonomous agents never hold PayPal API credentials, client secrets, access tokens, or direct payment capabilities. Their sole capability is posting structured payment intents to the Mandate Gateway.
+> **CRITICAL LEGAL DISCLAIMER: NOT LEGAL ADVICE**  
+> This document is prepared for architectural, technical, and informational planning purposes only. It does not constitute legal, regulatory, financial, tax, or compliance advice. Commercial deployment involving real-world currency, autonomous agent transactions, or multi-party payment settlement requires formal review and sign-off by qualified legal counsel in each relevant jurisdiction.
 
 ---
 
-## 2. Counterparty Payee Routing in Orders v2
+## 1. Fund Custody & Non-Custodial Architecture
 
-In PayPal Orders v2 (`POST /v2/checkout/orders`), funds can be routed to a designated seller counterparty by specifying the `payee` object within the purchase unit:
-
-```json
-{
-  "intent": "AUTHORIZE",
-  "purchase_units": [
-    {
-      "reference_id": "intent_id_12345",
-      "amount": {
-        "currency_code": "USD",
-        "value": "120.00"
-      },
-      "payee": {
-        "email_address": "seller@example.com",
-        "merchant_id": "2ABC123XYZ456"
-      }
-    }
-  ]
-}
-```
-
-### Sandbox Environment Path
-- In the PayPal Sandbox, specifying `payee` (with either `email_address` or `merchant_id`) routes the payout directly to that sandbox seller account upon authorization capture.
-- Does **not** require platform or marketplace partner verification in sandbox, allowing automated end-to-end multi-agent testing.
-
-### Production Environment Prerequisites
-In live production, paying a third-party seller requires platform partner onboarding:
-1. **PayPal Multiparty / Partner Platform Onboarding:**
-   - The platform operator must register for **PayPal Complete Payments for Marketplaces and Platforms** (or PayPal Partner Solutions).
-   - Platform account must be approved for marketplace seller routing (`PAYMENT` and/or `SHARED_VAULT` capabilities).
-2. **Seller KYC and Merchant Onboarding:**
-   - Sellers/counterparties must undergo onboarding and OAuth consent linking their PayPal merchant account to the platform.
-   - Alternatively, API calls routing to sellers must include third-party delegated authorization (`PayPal-Auth-Assertion`).
-3. **Platform Fee / Split Payouts:**
-   - If platform fees or fee splits are levied, partner platform fee configurations must be specified in `payment_instruction.platform_fees`.
+### 1.1 Mandate Never Holds, Custodies, or Transmits Funds
+Mandate is engineered strictly as a **deterministic policy firewall and transaction coordinator**. 
+- **Zero Custody:** At no point in the transaction lifecycle does fiat currency or electronic money enter Mandate's bank accounts, balance sheets, or digital wallets.
+- **PayPal Custodial Holds:** All monetary holds, authorizations, captures, voids, and refunds are executed exclusively on PayPal’s licensed banking and payment rails (PayPal Orders v2 / Payments v2).
+- **Agent Capability Boundaries:** Autonomous buyer agents possess **zero payment credentials**. An agent can only formulate structured payment requests (`POST /api/intents`). The Mandate Gateway deterministically evaluates cryptographic policy rules before transmitting any command to PayPal.
+- **Immediate Void on Default:** If an agent negotiation fails, a deliverable is rejected by the arbiter, or a dispute arises, the PayPal authorization hold is voided, releasing the funds back to the buyer's payment instrument without any intermediary holding period.
 
 ---
 
-## 3. Checklist for Live-Money Pilots
+## 2. Key Questions for Legal Counsel
 
-Before initiating a live-money pilot with real currency:
-- [ ] Legal counsel review on marketplace exemption vs money transmission licensing.
-- [ ] Production PayPal partner onboarding complete with verified multiparty payee permissions.
-- [ ] Counterparty identity verification (KYC/KYB) workflow integrated for verified counterparty onboarding.
-- [ ] Terms of Service and Escrow Arbitration Agreement accepted by human principals of buyer and seller agents.
-- [ ] Webhook signature verification strictly enforced in production (`APP_ENV=prod`).
-- [ ] Asymmetric mandate signing with KMS-managed keys.
+Prior to launching any commercial pilot with live customer funds, formal legal memorandum and counsel review must address the following critical domains:
+
+### 2.1 Escrow & Money Transmission Licensing (MTL)
+* **Question 1 (State & Federal MTL):** Does Mandate's role in conditionally triggering PayPal authorization captures and voids constitute "money transmission" under the US Bank Secrecy Act (BSA) or state-level Money Transmitter Laws, or does Mandate qualify for the **Agent of the Payee** or **Software Provider** exemptions?
+* **Question 2 (Escrow Law):** In states with formal escrow agency statutes (e.g., California Financial Code Division 6), does the use of the term "escrow" to describe automated conditional release mechanisms require an Escrow Agent license, or is it legally categorized as conditional payment instruction routing?
+* **Question 3 (International Payment Services):** Under the EU Payment Services Directive (PSD2/PSD3) and UK Payment Services Regulations, does Mandate qualify as a Technical Service Provider (TSP) under Article 3(o) of PSD2, which exempts entities that support payment services without at any time entering into possession of the funds?
+
+### 2.2 Marketplace & Partner Platform Agreements
+* **Question 4 (PayPal Multiparty Onboarding):** What contractual obligations, reserve requirements, and risk allocation terms are mandated by PayPal Complete Payments for Marketplaces agreements when routing funds directly to third-party seller accounts?
+* **Question 5 (Platform Fee Compliance):** Does levying platform facilitation fees or revenue splits require registration as a payment facilitator (PayFac) or third-party payment processor?
+
+### 2.3 Seller KYC, KYB, and Sanctions Compliance
+* **Question 6 (FinCEN & OFAC Screening):** Does Mandate or PayPal bear legal responsibility for Know-Your-Customer (KYC), Know-Your-Business (KYB), and Office of Foreign Assets Control (OFAC) sanctions screening when autonomous agents transact with pseudonymous seller handles?
+* **Question 7 (Counterparty Verification Standards):** What minimum documentary evidence (tax ID, beneficial ownership, bank account verification) is legally required before a seller handle can transition from `UNVERIFIED` to `VERIFIED` status in live commerce?
+
+### 2.4 Data Retention, Privacy & Tamper-Evident Logs
+* **Question 8 (GDPR / CCPA / Right to Erasure):** How does the immutable, hash-chained audit log (`AuditLog` with SHA-256 hash seals) reconcile with data privacy mandates such as GDPR Article 17 ("Right to Erasure") and CCPA when prompt context or seller names contain Personally Identifiable Information (PII)?
+* **Question 9 (Evidence Admissibility):** Do Ed25519-signed policy mandates and hash-chained audit logs satisfy the requirements of the Federal Rules of Evidence (Rule 902(13) & (14) - Certified Records Generated by an Electronic Process) in commercial breach of contract proceedings?
+
+### 2.5 AI Arbitration & Contractual Enforceability
+* **Question 10 (Autonomous Dispute Binding):** Are automated AI Arbiter deliverable inspection verdicts legally binding on buyers and sellers, and what explicit dispute resolution and human escalation clauses must be included in the Terms of Service to preclude arbitration challenges?
+
+---
+
+## 3. Mandatory Checklist Before Any Live-Money Pilot
+
+No live-money pilot may be initiated until every item on this checklist is completed, verified, and signed off in writing:
+
+### Legal & Regulatory Sign-Off
+- [ ] **Written Legal Opinion:** External counsel has provided formal guidance confirming that Mandate's software-only routing model does not trigger unlicensed money transmission or escrow licensing requirements.
+- [ ] **Terms of Service & User Agreements:** Comprehensive Terms of Service, Acceptable Use Policy, and AI Arbitration Agreements drafted and accepted by human principals via digital signature.
+- [ ] **Jurisdictional Boundaries:** Pilot is restricted to geographical jurisdictions where non-custodial marketplace exemptions are established.
+
+### Financial Rail & Payment Partner Readiness
+- [ ] **PayPal Production Partner Approval:** Production PayPal Partner Platform / Marketplace agreement fully executed with approved multiparty payee routing permissions.
+- [ ] **KYC/KYB Integration:** Verified seller onboarding pipeline active with identity verification, tax document collection (W-9/W-8BEN), and automated OFAC sanction list screening.
+- [ ] **Live Webhook Endpoints:** Production webhooks configured with HTTPS and cryptographic signature verification enforced (`APP_ENV=prod`).
+
+### Cryptographic & Operational Security
+- [ ] **Owner Key Infrastructure:** All owner mandate policies signed with authentic Ed25519 keypairs (demo HMAC signing strictly blocked in production).
+- [ ] **External Audit Anchor:** Periodic external hash checkpoints published to immutable public transparency logs or ledgers.
+- [ ] **Kill-Switch Operations:** Operational team trained on immediate mandate revocation drill and emergency void procedures.
+- [ ] **Cost & Turn Caps:** Per-mandate daily LLM cost caps and negotiation turn caps enabled and tested to prevent runaway autonomous spending.
+- [ ] **Held-Out Red-Team Defense:** Verified red-team defense rate exceeding 95% against adversarial injection and malicious payload variations.
