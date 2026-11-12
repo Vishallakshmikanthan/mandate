@@ -38,6 +38,11 @@ def get_db():
 
 def init_db():
     # Import all models to ensure they are registered with Base.metadata
+    from app.models import (
+        user, api_key, user_key, mandate, intent, escrow,
+        deliverable, arbiter, audit, counterparty, spend_ledger,
+        paypal_action, redteam, webhook
+    )
 
     if settings.APP_ENV in ("demo", "test"):
         Base.metadata.create_all(bind=engine)
