@@ -8,12 +8,21 @@ async def create_paypal_order(
     intent_id: str,
     amount_minor: int,
     currency: str = "USD",
-    description: str = "Mandate AI Agent Service Escrow"
+    description: str = "Mandate AI Agent Service Escrow",
+    payee_email: Optional[str] = None,
+    payee_merchant_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Create a PayPal order with intent: AUTHORIZE.
     Funds are held in escrow and not captured immediately.
+    Sets payee on the purchase unit if counterparty payee details are provided.
     """
+    payee_dict: Dict[str, str] = {}
+    if payee_email:
+        payee_dict["email_address"] = payee_email
+    if payee_merchant_id:
+        payee_dict["merchant_id"] = payee_merchant_id
+
     client = get_paypal_client()
     if client.simulation_mode:
         order_id = f"ORD-SANDBOX-{uuid.uuid4().hex[:12].upper()}"
@@ -22,22 +31,25 @@ async def create_paypal_order(
             "status": "CREATED",
             "approve_url": f"https://www.sandbox.paypal.com/checkoutnow?token={order_id}",
             "amount_minor": amount_minor,
-            "currency": currency
+            "currency": currency,
+            "payee": payee_dict if payee_dict else None
         }
 
     amount_str = f"{amount_minor / 100:.2f}"
+    purchase_unit: Dict[str, Any] = {
+        "reference_id": intent_id,
+        "description": description[:127],
+        "amount": {
+            "currency_code": currency.upper(),
+            "value": amount_str
+        }
+    }
+    if payee_dict:
+        purchase_unit["payee"] = payee_dict
+
     payload = {
         "intent": "AUTHORIZE",
-        "purchase_units": [
-            {
-                "reference_id": intent_id,
-                "description": description[:127],
-                "amount": {
-                    "currency_code": currency.upper(),
-                    "value": amount_str
-                }
-            }
-        ]
+        "purchase_units": [purchase_unit]
     }
     idempotency_key = f"{intent_id}-CREATE"
     resp = await client.request("POST", "/v2/checkout/orders", json_data=payload, idempotency_key=idempotency_key)
@@ -54,7 +66,8 @@ async def create_paypal_order(
         "status": resp.get("status", "CREATED"),
         "approve_url": approve_url or f"https://www.sandbox.paypal.com/checkoutnow?token={order_id}",
         "amount_minor": amount_minor,
-        "currency": currency
+        "currency": currency,
+        "payee": payee_dict if payee_dict else None
     }
 
 

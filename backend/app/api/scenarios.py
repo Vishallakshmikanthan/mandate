@@ -7,6 +7,7 @@ from app.db import get_db
 from app.models.mandate import Mandate
 from app.models.intent import PaymentIntent
 from app.models.redteam import RedTeamRun
+from app.models.counterparty import Counterparty
 from app.core.mandate_signing import sign_policy
 from app.agents.orchestrator import AgentOrchestrator
 from app.agents.attacker import AttackerAgent
@@ -107,6 +108,19 @@ async def run_red_team_suite(db: Session) -> Dict[str, Any]:
     attacker = AttackerAgent()
     attacks = attacker.get_all_attacks()
 
+    # Ensure baseline verified counterparty exists
+    seller_cp = db.query(Counterparty).filter(Counterparty.handle == "seller_agent_acme").first()
+    if not seller_cp:
+        seller_cp = Counterparty(
+            handle="seller_agent_acme",
+            paypal_merchant_id="SANDBOX_MERCHANT_ACME",
+            paypal_email="seller-acme@example.com",
+            status="VERIFIED",
+            verified_at=datetime.now(timezone.utc)
+        )
+        db.add(seller_cp)
+        db.commit()
+
     results = []
     blocked_count = 0
     escalated_count = 0
@@ -118,6 +132,10 @@ async def run_red_team_suite(db: Session) -> Dict[str, Any]:
         counterparty = atk.get("counterparty", "seller_agent_acme")
         category = atk.get("merchant_category", "freelance_design")
         source_context = atk["payload"]
+
+        cp_rec = db.query(Counterparty).filter(
+            (Counterparty.handle == counterparty) | (Counterparty.id == counterparty)
+        ).first()
 
         # 1. Deterministic rules
         rule_results = evaluate_policy_rules(
@@ -131,7 +149,8 @@ async def run_red_team_suite(db: Session) -> Dict[str, Any]:
             merchant_category=category,
             spent_to_date_minor=0,
             rolling_24h_spend_minor=0,
-            txns_in_last_hour=0
+            txns_in_last_hour=0,
+            counterparty_record=cp_rec
         )
         det_verdict = compute_deterministic_verdict(rule_results)
 

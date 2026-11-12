@@ -24,6 +24,7 @@ def evaluate_policy_rules(
     rolling_24h_spend_minor: int = 0,
     txns_in_last_hour: int = 0,
     now_utc: Optional[datetime] = None,
+    counterparty_record: Optional[Any] = None,
 ) -> List[RuleEvaluationResult]:
     """
     Pure deterministic evaluation of Rules R1 through R10.
@@ -105,21 +106,44 @@ def evaluate_policy_rules(
     results.append(RuleEvaluationResult(rule="R4_DAILY_LIMIT", passed=r4_passed, detail=r4_detail))
 
     # --------------------------------------------------------------------------
-    # R5: Counterparty Check (Allowlist & Blocklist)
+    # R5: Counterparty Check (Registry verification, Allowlist & Blocklist)
     # --------------------------------------------------------------------------
     allowed_counterparties = policy.get("allowed_counterparties", []) or []
     blocked_counterparties = policy.get("blocked_counterparties", []) or []
 
-    is_blocked = counterparty in blocked_counterparties
-    is_allowed = (not allowed_counterparties) or (counterparty in allowed_counterparties)
+    cp_id = None
+    cp_handle = None
+    cp_status = None
 
-    r5_passed = (not is_blocked) and is_allowed
-    if is_blocked:
+    if counterparty_record is not None:
+        if isinstance(counterparty_record, dict):
+            cp_id = counterparty_record.get("id")
+            cp_handle = counterparty_record.get("handle")
+            cp_status = counterparty_record.get("status")
+        else:
+            cp_id = getattr(counterparty_record, "id", None)
+            cp_handle = getattr(counterparty_record, "handle", None)
+            cp_status = getattr(counterparty_record, "status", None)
+
+    identifiers = {x for x in (counterparty, cp_handle, cp_id) if x}
+    is_blocked = bool(identifiers.intersection(blocked_counterparties))
+    is_allowed = (not allowed_counterparties) or bool(identifiers.intersection(allowed_counterparties))
+
+    if counterparty_record is None:
+        r5_passed = False
+        r5_detail = f"Counterparty '{counterparty}' does not exist in counterparty registry."
+    elif cp_status != "VERIFIED":
+        r5_passed = False
+        r5_detail = f"Counterparty '{counterparty}' exists but is not verified (status: '{cp_status}')."
+    elif is_blocked:
+        r5_passed = False
         r5_detail = f"Counterparty '{counterparty}' is explicitly listed on the blacklist."
     elif not is_allowed:
         r5_detail = f"Counterparty '{counterparty}' is not in the allowed counterparties whitelist: {allowed_counterparties}."
+        r5_passed = False
     else:
-        r5_detail = f"Counterparty '{counterparty}' is authorized."
+        r5_passed = True
+        r5_detail = f"Counterparty '{counterparty}' is registered, VERIFIED, and authorized."
     results.append(RuleEvaluationResult(rule="R5_COUNTERPARTY", passed=r5_passed, detail=r5_detail))
 
     # --------------------------------------------------------------------------

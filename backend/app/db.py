@@ -47,5 +47,6 @@ def init_db():
     from app.models.audit import AuditLog
     from app.models.webhook import WebhookEvent
     from app.models.redteam import RedTeamRun
+    from app.models.counterparty import Counterparty
 
     Base.metadata.create_all(bind=engine)

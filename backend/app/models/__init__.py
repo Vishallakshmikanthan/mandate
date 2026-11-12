@@ -5,6 +5,8 @@ from app.models.deliverable import Deliverable
 from app.models.arbiter import ArbiterVerdictRecord
 from app.models.audit import AuditLog
 from app.models.webhook import WebhookEvent
+from app.models.redteam import RedTeamRun
+from app.models.counterparty import Counterparty
 
 __all__ = [
     "Mandate",
@@ -14,4 +16,6 @@ __all__ = [
     "ArbiterVerdictRecord",
     "AuditLog",
     "WebhookEvent",
+    "RedTeamRun",
+    "Counterparty",
 ]

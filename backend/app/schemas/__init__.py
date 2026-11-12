@@ -23,6 +23,12 @@ from app.schemas.escrow import (
 )
 from app.schemas.audit import AuditLogResponse, AuditVerifyResponse
 from app.schemas.events import TimelineEvent
+from app.schemas.counterparty import (
+    CounterpartyBase,
+    CounterpartyCreate,
+    CounterpartyUpdate,
+    CounterpartyResponse,
+)
 
 __all__ = [
     "MandatePolicy",
@@ -44,5 +50,9 @@ __all__ = [
     "EscrowResponse",
     "AuditLogResponse",
     "AuditVerifyResponse",
-    "TimelineEvent"
+    "TimelineEvent",
+    "CounterpartyBase",
+    "CounterpartyCreate",
+    "CounterpartyUpdate",
+    "CounterpartyResponse",
 ]

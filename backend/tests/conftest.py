@@ -16,6 +16,7 @@ from app.models.deliverable import Deliverable
 from app.models.arbiter import ArbiterVerdictRecord
 from app.models.audit import AuditLog
 from app.models.webhook import WebhookEvent
+from app.models.counterparty import Counterparty
 
 # Use in-memory SQLite with StaticPool so all connections share the memory DB
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -32,6 +33,15 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def db_session():
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
+    default_cp = Counterparty(
+        handle="seller_agent_acme",
+        paypal_merchant_id="SANDBOX_MERCHANT_ACME",
+        paypal_email="seller-acme@example.com",
+        status="VERIFIED",
+        verified_at=datetime.now(timezone.utc)
+    )
+    session.add(default_cp)
+    session.commit()
     try:
         yield session
     finally:

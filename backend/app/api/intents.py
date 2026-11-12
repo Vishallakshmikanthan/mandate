@@ -8,6 +8,7 @@ from app.config import settings
 from app.models.mandate import Mandate
 from app.models.intent import PaymentIntent
 from app.models.escrow import Escrow
+from app.models.counterparty import Counterparty
 from app.schemas.intent import PaymentIntentCreate, PaymentIntentResponse, RuleEvaluationResult
 from app.schemas.escrow import EscrowState
 from app.core.policy_engine import evaluate_policy_rules, compute_deterministic_verdict
@@ -51,6 +52,11 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
         PaymentIntent.created_at >= one_hour_ago
     ).scalar() or 0
 
+    # Look up counterparty in registry
+    counterparty_obj = db.query(Counterparty).filter(
+        (Counterparty.handle == req.counterparty) | (Counterparty.id == req.counterparty)
+    ).first()
+
     # 1. Evaluate Deterministic Policy Engine (R1 - R10)
     rule_results = evaluate_policy_rules(
         policy=mandate.policy,
@@ -64,7 +70,8 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
         spent_to_date_minor=int(spent_to_date),
         rolling_24h_spend_minor=int(rolling_24h_spend),
         txns_in_last_hour=int(txns_in_last_hour),
-        now_utc=now_utc
+        now_utc=now_utc,
+        counterparty_record=counterparty_obj
     )
     deterministic_verdict = compute_deterministic_verdict(rule_results)
 
@@ -131,12 +138,14 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
         db.refresh(escrow)
         escrow_id = escrow.id
 
-        # Create PayPal Order with intent: AUTHORIZE
+        # Create PayPal Order with intent: AUTHORIZE and seller payee routing
         order_res = await create_paypal_order(
             intent_id=intent.id,
             amount_minor=req.amount_minor,
             currency=req.currency,
-            description=req.description
+            description=req.description,
+            payee_email=counterparty_obj.paypal_email if counterparty_obj else None,
+            payee_merchant_id=counterparty_obj.paypal_merchant_id if counterparty_obj else None
         )
         escrow.paypal_order_id = order_res.get("order_id")
         db.commit()

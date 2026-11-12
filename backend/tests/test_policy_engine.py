@@ -8,8 +8,10 @@ SECRET_KEY = "test_super_secure_secret_key_32_bytes_min!"
 
 def run_eval(policy, amount=12000, currency="USD", counterparty="seller_agent_acme",
              category="freelance_design", spent_total=0, spent_24h=0, velocity_txns=0,
-             status="ACTIVE", signing_key=SECRET_KEY, now=None):
+             status="ACTIVE", signing_key=SECRET_KEY, now=None, counterparty_record="DEFAULT"):
     sig = sign_policy(policy, SECRET_KEY)
+    if counterparty_record == "DEFAULT":
+        counterparty_record = {"id": "cp_default_id", "handle": counterparty, "status": "VERIFIED"}
     results = evaluate_policy_rules(
         policy=policy,
         mandate_signature=sig,
@@ -22,7 +24,8 @@ def run_eval(policy, amount=12000, currency="USD", counterparty="seller_agent_ac
         spent_to_date_minor=spent_total,
         rolling_24h_spend_minor=spent_24h,
         txns_in_last_hour=velocity_txns,
-        now_utc=now
+        now_utc=now,
+        counterparty_record=counterparty_record
     )
     verdict = compute_deterministic_verdict(results)
     return verdict, {r.rule: r.passed for r in results}
@@ -94,16 +97,27 @@ def test_r4_daily_limit(sample_policy):
 
 
 def test_r5_counterparty_allowlist_and_blocklist(sample_policy):
-    # Allowed: "seller_agent_acme" -> PASS
+    # 1. Allowed & Verified: "seller_agent_acme" -> PASS
     verdict, rules = run_eval(sample_policy, counterparty="seller_agent_acme")
     assert rules["R5_COUNTERPARTY"] is True
 
-    # Unlisted seller: "unknown_vendor_99" -> BLOCK
+    # 2. Unregistered/non-existent counterparty -> BLOCK
+    verdict, rules = run_eval(sample_policy, counterparty="unregistered_vendor", counterparty_record=None)
+    assert rules["R5_COUNTERPARTY"] is False
+    assert verdict == "BLOCKED"
+
+    # 3. Exists but UNVERIFIED status -> BLOCK
+    unverified_cp = {"id": "cp_unverified", "handle": "seller_agent_acme", "status": "UNVERIFIED"}
+    verdict, rules = run_eval(sample_policy, counterparty="seller_agent_acme", counterparty_record=unverified_cp)
+    assert rules["R5_COUNTERPARTY"] is False
+    assert verdict == "BLOCKED"
+
+    # 4. Unlisted seller (verified, but not in whitelist): "unknown_vendor_99" -> BLOCK
     verdict, rules = run_eval(sample_policy, counterparty="unknown_vendor_99")
     assert rules["R5_COUNTERPARTY"] is False
     assert verdict == "BLOCKED"
 
-    # Explicit blacklist: "unverified_seller_66" -> BLOCK
+    # 5. Explicit blacklist: "unverified_seller_66" -> BLOCK
     verdict, rules = run_eval(sample_policy, counterparty="unverified_seller_66")
     assert rules["R5_COUNTERPARTY"] is False
     assert verdict == "BLOCKED"

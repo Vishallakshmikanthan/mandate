@@ -20,6 +20,7 @@ from app.models.intent import PaymentIntent
 from app.models.escrow import Escrow
 from app.models.deliverable import Deliverable
 from app.models.arbiter import ArbiterVerdictRecord
+from app.models.counterparty import Counterparty
 from app.schemas.escrow import EscrowState
 from app.config import settings
 
@@ -100,6 +101,23 @@ class AgentOrchestrator:
         # ----------------------------------------------------------------------
         # Stage 4: Mandate Gateway Evaluation (Policy Engine + Risk Scorer)
         # ----------------------------------------------------------------------
+        # Ensure counterparty exists and is verified
+        counterparty_record = self.db.query(Counterparty).filter(
+            (Counterparty.handle == seller.agent_id) | (Counterparty.id == seller.agent_id)
+        ).first()
+        if not counterparty_record:
+            from datetime import datetime, timezone
+            counterparty_record = Counterparty(
+                handle=seller.agent_id,
+                paypal_merchant_id="SANDBOX_MERCHANT_ACME",
+                paypal_email="seller-acme@example.com",
+                status="VERIFIED",
+                verified_at=datetime.now(timezone.utc)
+            )
+            self.db.add(counterparty_record)
+            self.db.commit()
+            self.db.refresh(counterparty_record)
+
         # Evaluate deterministic policy engine
         rule_results = evaluate_policy_rules(
             policy=mandate.policy,
@@ -112,7 +130,8 @@ class AgentOrchestrator:
             merchant_category="freelance_design",
             spent_to_date_minor=0,
             rolling_24h_spend_minor=0,
-            txns_in_last_hour=0
+            txns_in_last_hour=0,
+            counterparty_record=counterparty_record
         )
         deterministic_verdict = compute_deterministic_verdict(rule_results)
 
@@ -234,12 +253,14 @@ class AgentOrchestrator:
         self.db.add(escrow)
         self.db.commit()
 
-        # Create PayPal Order
+        # Create PayPal Order with seller payee routing
         order_res = await create_paypal_order(
             intent_id=intent.id,
             amount_minor=intent_amount,
             currency="USD",
-            description="Mandate Escrow: Logo Design"
+            description="Mandate Escrow: Logo Design",
+            payee_email=counterparty_record.paypal_email if counterparty_record else None,
+            payee_merchant_id=counterparty_record.paypal_merchant_id if counterparty_record else None
         )
         escrow.paypal_order_id = order_res["order_id"]
         self.db.commit()
