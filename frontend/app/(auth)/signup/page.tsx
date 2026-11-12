@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { GlassCard } from "@/components/glass/GlassCard";
 import { AuroraBackground } from "@/components/glass/AuroraBackground";
 import { NoiseOverlay } from "@/components/glass/NoiseOverlay";
-import { Lock, Mail, User, ShieldCheck, Check } from "lucide-react";
+import { Lock, Mail, User, ShieldCheck, Check, AlertCircle } from "lucide-react";
+import { registerUser } from "@/lib/auth";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [agree, setAgree] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const calculateStrength = (p: string) => {
     let s = 0;
@@ -27,14 +29,20 @@ export default function SignupPage() {
 
   const strength = calculateStrength(password);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agree) return;
+    setError(null);
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+
+    try {
+      await registerUser(email, password, name);
       router.push("/onboarding");
-    }, 400);
+    } catch (err: any) {
+      setError(err?.message || "Failed to register account.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,6 +66,13 @@ export default function SignupPage() {
         </div>
 
         <GlassCard className="p-8 space-y-5">
+          {error && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-mono text-neutral-300 mb-1.5">Full Name</label>
@@ -83,7 +98,7 @@ export default function SignupPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@company.com"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-black/40 border border-white/[0.12] text-xs text-white focus:outline-none focus:border-cyan-400"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-black/40 border border-white/[0.12] text-xs text-white focus:outline-none focus:border-cyan-400 font-mono"
                   required
                 />
               </div>
@@ -97,13 +112,13 @@ export default function SignupPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min 10 characters with letter & number"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-black/40 border border-white/[0.12] text-xs text-white focus:outline-none focus:border-cyan-400"
+                  placeholder="Min 8 characters"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-black/40 border border-white/[0.12] text-xs text-white focus:outline-none focus:border-cyan-400 font-mono"
                   required
                 />
               </div>
 
-              {/* Password strength meter (Spec 8.2) */}
+              {/* Password strength meter */}
               {password.length > 0 && (
                 <div className="mt-2 space-y-1">
                   <div className="flex gap-1 h-1 w-full bg-white/[0.08] rounded-full overflow-hidden">
@@ -153,9 +168,10 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading || !agree}
-              className="w-full py-2.5 rounded-xl brand-gradient-bg text-black text-xs font-bold transition-transform hover:scale-105 shadow-[0_0_20px_rgba(108,123,255,0.4)] disabled:opacity-50"
+              className="w-full py-2.5 rounded-xl brand-gradient-bg text-black text-xs font-bold transition-transform hover:scale-105 shadow-[0_0_20px_rgba(108,123,255,0.4)] disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {loading ? "Creating Account..." : "Create Account & Start Wizard"}
+              <ShieldCheck className="w-4 h-4" />
+              <span>{loading ? "Registering Account..." : "Create Account & Start Wizard"}</span>
             </button>
           </form>
 
@@ -170,4 +186,3 @@ export default function SignupPage() {
     </div>
   );
 }
-
