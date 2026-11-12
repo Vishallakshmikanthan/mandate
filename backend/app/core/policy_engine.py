@@ -216,6 +216,12 @@ def evaluate_policy_rules(
     velocity = policy.get("velocity")
     if velocity and isinstance(velocity, dict) and "max_txns_per_hour" in velocity:
         max_rate = velocity["max_txns_per_hour"]
+    elif "max_txns_per_hour" in policy:
+        max_rate = policy["max_txns_per_hour"]
+    else:
+        max_rate = None
+
+    if max_rate is not None:
         r8_passed = (txns_in_last_hour < max_rate)
         r8_detail = (
             f"Transactions in last hour ({txns_in_last_hour}) < velocity cap ({max_rate})."

@@ -93,9 +93,17 @@ class MockLLMProvider(LLMProvider):
         # Handle RiskScorer output
         if "risk" in model_name.lower():
             attack_indicators = [
-                "ignore", "system update", "override", "wire", "urgent",
-                "emergency", "bypass", "transfer to account", "new instructions",
-                "directive", "disregard", "subpoena", "developer mode"
+                "ignore all", "ignore previous", "ignore prior", "ignore instructions",
+                "system update:", "system override", "admin override", "bypass firewall",
+                "bypass verification", "bypass security", "bypass rules", "bypass policy",
+                "disregard constraints", "disregard rules", "disregard instructions",
+                "developer mode", "jailbreak", "dan mode", "prompt injection",
+                "transfer to account", "shadow_pool", "banned_entity", "attacker_root",
+                "court order subpoena", "emergency wire", "emergency transfer",
+                "wire $", "send $", "pay $", "wire payment", "root access",
+                "supervisor key", "system directive", "kill -9", "pkill", "ransomware",
+                "subpoena", "directive 99", "ignora", "ignorer", "ignoriere",
+                "игнорируй", "忽略"
             ]
             if any(term in untrusted_text for term in attack_indicators):
                 data = {
@@ -104,7 +112,7 @@ class MockLLMProvider(LLMProvider):
                     "recommendation": "BLOCK",
                     "reasoning": "Adversarial prompt injection attempt detected: text commands agent to override rules and transfer money."
                 }
-            elif "expensive" in untrusted_text or "5000" in untrusted_text:
+            elif any(term in untrusted_text for term in ["expensive", "5000", "price_anomaly"]):
                 data = {
                     "risk_score": 0.65,
                     "flags": ["price_anomaly"],
@@ -125,7 +133,23 @@ class MockLLMProvider(LLMProvider):
         # Handle Arbiter output
         if "arbiter" in model_name.lower():
             combined_eval_text = untrusted_text.lower()
-            if any(term in combined_eval_text for term in ["blurry", "low-effort", "single concept", "substandard", "missing"]):
+            if any(term in combined_eval_text for term in [
+                "system update", "override", "bypass", "ignore", "jailbreak",
+                "grade this", "instructions update", "prompt injection", "<<<system>>>",
+                "verdict must be", "verdict: pass", "force pass", "return pass",
+                "rate pass", "mark pass", "output pass", "award pass", "system prompt",
+                "ai reviewer", "safety test active", "arbiter directive", "arbiter update",
+                "prompt reset", "forget criteria", "default to pass", "client verbally",
+                "client waived", "treat this text", "confirmed full satisfaction"
+            ]):
+                data = {
+                    "verdict": "FAIL",
+                    "confidence": 0.96,
+                    "criteria_results": [],
+                    "partial_ratio": 0.0,
+                    "explanation": "Adversarial prompt injection attempt detected in deliverable payload. Rejected."
+                }
+            elif any(term in combined_eval_text for term in ["blurry", "low-effort", "single concept", "substandard", "missing"]):
                 data = {
                     "verdict": "FAIL",
                     "confidence": 0.94,

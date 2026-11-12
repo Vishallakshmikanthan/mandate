@@ -20,6 +20,7 @@ async def evaluate_deliverable_arbitration(
     sha256: Optional[str] = None,
     inspection_status: Optional[str] = None,
     extracted_text: Optional[str] = None,
+    llm_provider: Optional[Any] = None,
 ) -> ArbiterVerdictOutput:
     """
     Impartial AI Arbiter evaluation with dual-run self-consistency verification.
@@ -29,7 +30,7 @@ async def evaluate_deliverable_arbitration(
     - If confidence < 0.70 -> forces NEEDS_HUMAN.
     - If deliverable is an unsupported binary -> forces NEEDS_HUMAN with stored SHA-256 reference.
     """
-    provider = get_llm_provider()
+    provider = llm_provider or get_llm_provider()
 
     # Rule: Unsupported binaries cannot be inspected automatically by Arbiter
     if inspection_status == "UNSUPPORTED_BINARY":

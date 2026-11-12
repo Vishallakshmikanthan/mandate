@@ -22,19 +22,26 @@ class RiskScoreOutput(BaseModel):
     prompt_version: str = PROMPT_VERSION
 
 
+HOMOGLYPH_MAP = str.maketrans({
+    'а': 'a', 'с': 'c', 'е': 'e', 'і': 'i', 'ј': 'j', 'о': 'o', 'р': 'p', 'ѕ': 's', 'у': 'y', 'х': 'x',
+    'А': 'A', 'В': 'B', 'С': 'C', 'Е': 'E', 'Н': 'H', 'І': 'I', 'Ј': 'J', 'К': 'K', 'М': 'M', 'О': 'O',
+    'Р': 'P', 'Т': 'T', 'Х': 'X', 'Ү': 'Y'
+})
+
+
 def normalize_untrusted_text(text: Optional[str]) -> str:
     """
     Unicode NFKC normalization and strip zero-width / invisible control characters
-    to prevent unicode-smuggling adversarial injection attacks.
+    and bidi override characters to prevent unicode-smuggling attacks.
     """
     if not text:
         return ""
     # 1. NFKC normalization
     normalized = unicodedata.normalize("NFKC", text)
-    # 2. Strip zero-width and invisible formatting characters
-    # \u200b (zero-width space), \u200c (ZWNJ), \u200d (ZWJ), \u2060 (word joiner),
-    # \ufeff (BOM), \u00ad (soft hyphen), \u200e/\u200f (LRM/RLM)
-    normalized = re.sub(r"[\u200b-\u200d\u2060\ufeff\u00ad\u200e\u200f]", "", normalized)
+    # 2. Strip zero-width, invisible formatting, and bidi override characters:
+    # \u200b-\u200d (zero-width space, ZWNJ, ZWJ), \u2060 (word joiner), \ufeff (BOM), \u00ad (soft hyphen),
+    # \u200e/\u200f (LRM/RLM), \u202a-\u202e (bidi embeddings and overrides)
+    normalized = re.sub(r"[\u200b-\u200d\u2060\ufeff\u00ad\u200e\u200f\u202a-\u202e]", "", normalized)
     # 3. Collapse multiple spaces
     normalized = re.sub(r"\s+", " ", normalized).strip()
     return normalized
@@ -53,7 +60,16 @@ STRONG_PATTERNS = [
     (r"(?i)<<<system>>>", "jailbreak_attempt"),
     (r"(?i)developer\s+mode\s+enabled", "jailbreak_attempt"),
     (r"(?i)bypass\s+(verification|firewall|gateway|security|rules)", "security_bypass_attempt"),
-    (r"(?i)grade\s+this\s+deliverable\s+as\s+pass", "arbiter_social_engineering"),
+    (r"(?i)(gateway|security|firewall|policy|rule|mandate)\s+bypass", "security_bypass_attempt"),
+    (r"(?i)disable\s+(rule|policy|firewall|security|verification|limit|engine)", "security_bypass_attempt"),
+    (r"(?i)(grade|rate|mark|award|output|return)\s+(this\s+.*as\s+)?pass", "arbiter_social_engineering"),
+    (r"(?i)verdict\s*(must\s+be|:|=)\s*pass", "arbiter_social_engineering"),
+    (r"(?i)force\s+pass", "arbiter_social_engineering"),
+    (r"(?i)system\s+prompt\s*:", "system_prompt_injection"),
+    (r"(?i)note\s+to\s+(ai\s+)?(reviewer|evaluator|arbiter)", "arbiter_social_engineering"),
+    (r"(?i)arbiter\s+(instructions|directive|update|notice)", "arbiter_social_engineering"),
+    (r"(?i)ignore\s+(all\s+)?(previous\s+)?(rubrics|spec|specification|criteria)", "instruction_override_detected"),
+    (r"(?i)prompt\s+reset", "instruction_override_detected"),
     (r"(?i)wire\s+.*to\s+account", "account_swap_attempt"),
     (r"(?i)emergency\s+(wire|transfer|payment|send)", "fake_urgency"),
     (r"(?i)jailbreak", "jailbreak_attempt"),
@@ -77,6 +93,32 @@ STRONG_PATTERNS = [
     (r"(?i)übersteuerung\s+der\s+regeln", "multilingual_mandate_override"),
     # Multilingual: Portuguese
     (r"(?i)ignorar\s+(todas\s+as\s+)?instruções\s+anteriores", "multilingual_instruction_override"),
+    # Multilingual: Italian
+    (r"(?i)ignora\s+(le\s+|tutte\s+le\s+)?istruzioni", "multilingual_instruction_override"),
+    # Multilingual: Dutch
+    (r"(?i)negeer\s+(alle\s+)?(eerdere\s+)?instructies", "multilingual_instruction_override"),
+    # Multilingual: Swedish
+    (r"(?i)ignorera\s+(alla\s+)?tidigare\s+instruktioner", "multilingual_instruction_override"),
+    # Multilingual: Polish
+    (r"(?i)zignoruj\s+(wszystkie\s+)?poprzednie\s+instrukcje", "multilingual_instruction_override"),
+    # Multilingual: Turkish
+    (r"(?i)talimatları\s+yok\s+say", "multilingual_instruction_override"),
+    # Multilingual: Vietnamese
+    (r"(?i)bỏ\s+qua\s+tất\s+cả\s+hướng\s+dẫn", "multilingual_instruction_override"),
+    # Multilingual: Japanese
+    (r"(すべての)?(指示|ルール|命令)を無視", "multilingual_instruction_override"),
+    # Multilingual: Korean
+    (r"(모든\s+)?(이전\s+)?지침(을)?\s*무시", "multilingual_instruction_override"),
+    # Multilingual: Arabic
+    (r"تجاهل\s+(كافة|جميع)?\s*التعليمات", "multilingual_instruction_override"),
+    # Multilingual: Greek
+    (r"(?i)αγνοήστε\s+όλες\s+τις\s+προηγούμενες\s+οδηγίες", "multilingual_instruction_override"),
+    # Multilingual: Hebrew
+    (r"התעלם\s+מכל\s+ההוראות", "multilingual_instruction_override"),
+    # Multilingual: Danish & Norwegian
+    (r"(?i)ignorer\s+(alle\s+)?tidligere\s+(instruktioner|instruksjoner)", "multilingual_instruction_override"),
+    # Multilingual: Finnish
+    (r"(?i)ohita\s+kaikki\s+aiemmat\s+ohjeet", "multilingual_instruction_override"),
 ]
 
 # -----------------------------------------------------------------------------
@@ -115,6 +157,22 @@ def run_injection_prefilter(text: Optional[str]) -> Tuple[bool, List[str], float
         if re.search(pattern, normalized):
             if flag not in strong_flags:
                 strong_flags.append(flag)
+
+    # 1b. Check transliterated homoglyphs to detect unicode-smuggled English attacks (e.g. іgnоrе)
+    latin_view = normalized.translate(HOMOGLYPH_MAP)
+    if latin_view != normalized:
+        for pattern, flag in STRONG_PATTERNS:
+            if re.search(pattern, latin_view):
+                if flag not in strong_flags:
+                    strong_flags.append(flag)
+
+    # 1c. Check de-spaced text to detect spaced character evasion (e.g. i g n o r e)
+    despaced = re.sub(r"(?<=\b[a-zA-Z])\s+(?=[a-zA-Z]\b)", "", latin_view)
+    if despaced != latin_view:
+        for pattern, flag in STRONG_PATTERNS:
+            if re.search(pattern, despaced):
+                if flag not in strong_flags:
+                    strong_flags.append(flag)
 
     if strong_flags:
         return True, strong_flags, 0.98
@@ -168,7 +226,8 @@ async def score_intent_risk(
     amount_minor: int,
     currency: str,
     description: str,
-    source_context: Optional[str] = None
+    source_context: Optional[str] = None,
+    llm_provider: Optional[Any] = None
 ) -> RiskScoreOutput:
     """
     Evaluate risk of payment intent using NFKC normalization, deterministic prefilter,
@@ -191,7 +250,7 @@ async def score_intent_risk(
         source_context=clean_ctx or "No upstream chat context provided."
     )
 
-    provider = get_llm_provider()
+    provider = llm_provider or get_llm_provider()
 
     try:
         output: RiskScoreOutput = await provider.complete_json(
