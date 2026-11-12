@@ -110,207 +110,238 @@ export const MandateBuilder: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-[1400px] mx-auto py-4">
       {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-white/[0.08] gap-4">
         <div>
-          <h2 className="text-lg font-black text-white flex items-center gap-2">
-            <Shield className="w-5 h-5 text-blue-400" />
-            <span>Cryptographic Spending Mandate Builder</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400">
+            Protocol Configuration
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-normal tracking-tightest text-white mt-1">
+            Mandate Policy Builder
           </h2>
-          <p className="text-xs text-slate-400">
-            Define deterministic financial constraints and sign them with HMAC-SHA256 before granting agent spend ability.
+          <p className="text-xs text-neutral-400 mt-1 max-w-xl">
+            Define deterministic financial bounds and sign them with HMAC-SHA256 before granting an autonomous agent spending authority.
           </p>
         </div>
         <button
           onClick={fetchMandates}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 text-xs hover:bg-slate-800 transition-colors self-start"
+          className="ref-circle-btn self-start"
+          title="Refresh Mandates"
         >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh</span>
+          <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
       {/* Main Builder Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Form Controls */}
-        <div className="glass-panel rounded-2xl p-5 border border-slate-800 space-y-4">
-          <h3 className="font-bold text-sm text-slate-200 uppercase tracking-wider pb-2 border-b border-slate-800">
-            Policy Specification
-          </h3>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Form Controls (7 cols) */}
+        <div className="lg:col-span-7 ref-glass-card rounded-2xl p-6 sm:p-7 border border-white/[0.08] space-y-5">
+          <div className="pb-3 border-b border-white/[0.06] flex items-center justify-between">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-neutral-400">
+              Policy Parameters
+            </span>
+            <span className="text-[10px] font-mono text-neutral-500">JSON-Schema v1</span>
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
-              <label className="text-slate-400 font-medium block mb-1">Human Principal ID</label>
+              <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+                Human Principal ID
+              </label>
               <input
                 type="text"
                 value={ownerId}
                 onChange={(e) => setOwnerId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:border-blue-500 focus:outline-none font-mono"
+                className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-white font-mono focus:border-white/40 focus:outline-none transition-colors"
               />
             </div>
             <div>
-              <label className="text-slate-400 font-medium block mb-1">Autonomous Agent ID</label>
+              <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+                Autonomous Agent ID
+              </label>
               <input
                 type="text"
                 value={agentId}
                 onChange={(e) => setAgentId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:border-blue-500 focus:outline-none font-mono"
+                className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-white font-mono focus:border-white/40 focus:outline-none transition-colors"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
             <div>
-              <label className="text-slate-400 font-medium block mb-1">Per-Txn Cap ($)</label>
+              <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+                Per-Txn Cap ($)
+              </label>
               <input
                 type="number"
                 value={maxPerTxn}
                 onChange={(e) => setMaxPerTxn(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-blue-500 focus:outline-none"
+                className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-white font-mono focus:border-white/40 focus:outline-none"
               />
             </div>
             <div>
-              <label className="text-slate-400 font-medium block mb-1">Lifetime Budget ($)</label>
+              <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+                Total Budget ($)
+              </label>
               <input
                 type="number"
                 value={maxTotal}
                 onChange={(e) => setMaxTotal(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-blue-500 focus:outline-none"
+                className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-white font-mono focus:border-white/40 focus:outline-none"
               />
             </div>
             <div>
-              <label className="text-slate-400 font-medium block mb-1">24h Daily Limit ($)</label>
+              <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+                24h Daily Limit ($)
+              </label>
               <input
                 type="number"
                 value={dailyLimit}
                 onChange={(e) => setDailyLimit(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-blue-500 focus:outline-none"
+                className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-white font-mono focus:border-white/40 focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
-              <label className="text-slate-400 font-medium block mb-1">Escalate Above ($)</label>
+              <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+                Escalate Above ($)
+              </label>
               <input
                 type="number"
                 value={escalateAbove}
                 onChange={(e) => setEscalateAbove(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-blue-500 focus:outline-none"
+                className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-white font-mono focus:border-white/40 focus:outline-none"
               />
             </div>
             <div>
-              <label className="text-slate-400 font-medium block mb-1">Velocity (Txns/Hr)</label>
+              <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+                Velocity (Txns/Hr)
+              </label>
               <input
                 type="number"
                 value={velocity}
                 onChange={(e) => setVelocity(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-blue-500 focus:outline-none"
+                className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-white font-mono focus:border-white/40 focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
-              <label className="text-slate-400 font-medium block mb-1">Whitelist Counterparty</label>
+              <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+                Allowed Counterparty
+              </label>
               <input
                 type="text"
                 value={counterparty}
                 onChange={(e) => setCounterparty(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-blue-500 focus:outline-none"
+                className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-white font-mono focus:border-white/40 focus:outline-none"
               />
             </div>
             <div>
-              <label className="text-slate-400 font-medium block mb-1">Blacklist Counterparty</label>
+              <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+                Blacklisted Counterparty
+              </label>
               <input
                 type="text"
                 value={blockedCounterparty}
                 onChange={(e) => setBlockedCounterparty(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-red-300 font-mono focus:border-red-500 focus:outline-none"
+                className="w-full bg-red-950/20 border border-red-500/30 rounded-xl px-3.5 py-2 text-red-300 font-mono focus:border-red-500 focus:outline-none"
               />
             </div>
           </div>
 
           <div className="text-xs">
-            <label className="text-slate-400 font-medium block mb-1">Allowed Categories</label>
+            <label className="text-neutral-400 font-mono text-[10px] uppercase block mb-1">
+              Allowed Merchant Categories
+            </label>
             <input
               type="text"
               value={categories}
               onChange={(e) => setCategories(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-blue-500 focus:outline-none"
+              className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-white font-mono focus:border-white/40 focus:outline-none"
             />
           </div>
 
-          <button
-            onClick={handleCreateMandate}
-            disabled={loading}
-            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold text-xs shadow-lg shadow-blue-500/20 hover:opacity-95 transition-all flex items-center justify-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{loading ? "Signing & Storing..." : "Sign & Register Mandate"}</span>
-          </button>
+          <div className="pt-2">
+            <button
+              onClick={handleCreateMandate}
+              disabled={loading}
+              className="ref-pill-primary w-full py-3 text-xs uppercase tracking-wider font-mono cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{loading ? "Signing & Storing..." : "Sign & Register Mandate"}</span>
+            </button>
+          </div>
         </div>
 
-        {/* Live Canonical Preview */}
-        <div className="glass-panel rounded-2xl p-5 border border-slate-800 flex flex-col justify-between">
+        {/* Live Canonical Preview (5 cols) */}
+        <div className="lg:col-span-5 ref-glass-card rounded-2xl p-6 sm:p-7 border border-white/[0.08] flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2 text-xs">
-                <Key className="w-3.5 h-3.5 text-blue-400" />
-                <span className="font-bold text-slate-200 uppercase tracking-wider">
-                  Canonical JSON & HMAC Preview
-                </span>
-              </div>
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-neutral-400">
+                Canonical JSON & HMAC
+              </span>
               <button
                 onClick={copyToClipboard}
-                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 px-2 py-1 rounded bg-slate-800/80 transition-colors"
+                className="flex items-center gap-1 text-[11px] font-mono text-neutral-400 hover:text-white px-2.5 py-1 rounded-full bg-white/[0.05] border border-white/[0.08] transition-colors cursor-pointer"
               >
                 {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copied ? "Copied" : "Copy"}</span>
               </button>
             </div>
 
-            <div className="mt-3 p-3 rounded-xl bg-black/70 border border-slate-800/80 max-h-[360px] overflow-y-auto">
-              <pre className="text-[11px] font-mono text-cyan-300 whitespace-pre-wrap">{canonicalJson}</pre>
+            <div className="mt-4 p-4 rounded-xl bg-black/80 border border-white/[0.06] max-h-[360px] overflow-y-auto no-scrollbar">
+              <pre className="text-[11px] font-mono text-neutral-300 whitespace-pre-wrap leading-relaxed">
+                {canonicalJson}
+              </pre>
             </div>
           </div>
 
-          <div className="mt-4 p-3 rounded-xl bg-blue-950/20 border border-blue-800/30 text-xs text-blue-300">
-            <div className="flex items-center gap-1.5 font-semibold mb-1">
-              <CheckCircle2 className="w-4 h-4 text-blue-400" />
-              <span>HMAC-SHA256 Cryptographic Binding</span>
+          <div className="mt-6 p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] text-xs">
+            <div className="flex items-center gap-2 font-mono text-xs text-white mb-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-neutral-300" />
+              <span className="uppercase tracking-wider">Cryptographic Binding</span>
             </div>
-            <p className="text-[11px] text-blue-300/80 leading-relaxed">
-              Every mandate policy is normalized and signed using the server's private key. The Mandate Gateway refuses any intent if the policy payload does not match its signature.
+            <p className="text-[11px] text-neutral-400 leading-relaxed font-sans mt-1">
+              Every spending policy is normalized and signed with HMAC-SHA256. The Mandate Gateway validates signatures prior to processing intent requests.
             </p>
           </div>
         </div>
       </div>
 
       {/* Active Mandates Table */}
-      <div className="glass-panel rounded-2xl p-5 border border-slate-800">
-        <h3 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-3">
-          Active Mandates & Spend Balances
-        </h3>
+      <div className="ref-glass-card rounded-2xl p-6 sm:p-7 border border-white/[0.08]">
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/[0.06]">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-neutral-400">
+            Active Mandates & Spend Balances
+          </span>
+          <span className="text-[10px] font-mono text-neutral-500">
+            {mandates.length} registered
+          </span>
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px] font-mono">
-                <th className="pb-2">Mandate ID</th>
-                <th className="pb-2">Agent</th>
-                <th className="pb-2">Per-Txn Cap</th>
-                <th className="pb-2">Spend / Budget</th>
-                <th className="pb-2">Status</th>
-                <th className="pb-2">Signature</th>
-                <th className="pb-2 text-right">Actions</th>
+              <tr className="border-b border-white/[0.06] text-neutral-400 uppercase text-[10px] font-mono">
+                <th className="pb-3">Mandate ID</th>
+                <th className="pb-3">Agent</th>
+                <th className="pb-3">Per-Txn Cap</th>
+                <th className="pb-3">Spend / Budget</th>
+                <th className="pb-3">Status</th>
+                <th className="pb-3">Signature</th>
+                <th className="pb-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-mono">
+            <tbody className="divide-y divide-white/[0.04] font-mono">
               {mandates.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-slate-500 font-sans">
+                  <td colSpan={7} className="py-8 text-center text-neutral-500 font-sans">
                     No mandates configured yet.
                   </td>
                 </tr>
@@ -318,35 +349,34 @@ export const MandateBuilder: React.FC = () => {
                 mandates.map((m) => {
                   const isRevoked = m.status === "REVOKED";
                   return (
-                    <tr key={m.id} className="text-slate-300 hover:bg-slate-900/40">
-                      <td className="py-3 font-semibold text-blue-400 truncate max-w-[120px]">{m.id}</td>
-                      <td className="py-3 text-slate-300">{m.agent_id}</td>
-                      <td className="py-3 text-slate-200">
+                    <tr key={m.id} className="text-neutral-300 hover:bg-white/[0.02] transition-colors">
+                      <td className="py-3 font-medium text-white truncate max-w-[120px]">{m.id}</td>
+                      <td className="py-3 text-neutral-400">{m.agent_id}</td>
+                      <td className="py-3 text-white">
                         ${(m.policy.max_per_transaction_minor / 100).toFixed(2)}
                       </td>
-                      <td className="py-3 text-emerald-400 font-bold">
+                      <td className="py-3 text-emerald-400 font-medium">
                         ${(m.spent_to_date_minor / 100).toFixed(2)} / $
                         {(m.policy.max_total_minor / 100).toFixed(2)}
                       </td>
                       <td className="py-3">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                            isRevoked
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${isRevoked
                               ? "bg-red-500/10 text-red-400 border-red-500/30"
                               : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                          }`}
+                            }`}
                         >
                           {m.status}
                         </span>
                       </td>
-                      <td className="py-3 text-[10px] text-slate-500 truncate max-w-[120px]">
+                      <td className="py-3 text-[10px] text-neutral-500 truncate max-w-[120px]">
                         {m.signature.slice(0, 16)}...
                       </td>
                       <td className="py-3 text-right">
                         {!isRevoked && (
                           <button
                             onClick={() => handleRevoke(m.id)}
-                            className="px-2.5 py-1 rounded bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-[10px] font-bold transition-colors inline-flex items-center gap-1"
+                            className="px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-[10px] font-mono font-medium transition-colors inline-flex items-center gap-1 cursor-pointer"
                           >
                             <AlertOctagon className="w-3 h-3" />
                             <span>Killswitch</span>
