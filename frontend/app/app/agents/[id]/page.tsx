@@ -6,7 +6,8 @@ import Link from "next/link";
 import { GlassCard } from "@/components/glass/GlassCard";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Bot, ArrowLeft, Shield, Clock, CreditCard, Lock, AlertTriangle } from "lucide-react";
-import { demoStore, Agent, PaymentIntentItem } from "@/lib/demo-store";
+import { fetchAgent, fetchPayments } from "@/lib/api";
+import { Agent, PaymentIntentItem } from "@/lib/demo-store";
 import { formatMoney } from "@/lib/money";
 
 export default function AgentDetailPage() {
@@ -14,13 +15,36 @@ export default function AgentDetailPage() {
   const agentId = params.id as string;
   const [agent, setAgent] = useState<Agent | null>(null);
   const [payments, setPayments] = useState<PaymentIntentItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const found = demoStore.getAgents().find((a) => a.id === agentId);
-    setAgent(found || null);
-    const relatedPayments = demoStore.getPayments().filter((p) => p.agent_id === agentId);
-    setPayments(relatedPayments);
+    let mounted = true;
+    Promise.all([fetchAgent(agentId), fetchPayments()])
+      .then(([agentData, allPayments]) => {
+        if (mounted) {
+          setAgent(agentData);
+          setPayments(allPayments.filter((p) => p.agent_id === agentId));
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
   }, [agentId]);
+
+  if (loading) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 text-center text-xs text-neutral-400 font-mono">
+        Loading agent details...
+      </div>
+    );
+  }
 
   if (!agent) {
     return (

@@ -1,36 +1,45 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { GlassCard } from "@/components/glass/GlassCard";
 import { Bell, AlertTriangle, ShieldCheck, CheckCircle2, Clock, Trash2 } from "lucide-react";
+import { fetchAuditLogs, subscribeToStream } from "@/lib/api";
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState([
-    {
-      id: "1",
-      type: "blocked",
-      title: "Adversarial Injection Halted",
-      desc: "$900.00 unauthorized transfer attempt blocked by Policy Rule R2.",
-      time: "10 mins ago",
-      read: false,
-    },
-    {
-      id: "2",
-      type: "escalated",
-      title: "Human Escalation Threshold Exceeded",
-      desc: "Intent pi_9823 for $180.00 requires human review (above $150.00 threshold).",
-      time: "25 mins ago",
-      read: false,
-    },
-    {
-      id: "3",
-      type: "success",
-      title: "AI Arbiter Released Escrow Hold",
-      desc: "Contract esc_7702 released $200.00 to seller_agent_acme after all criteria passed.",
-      time: "2 hours ago",
-      read: true,
-    },
-  ]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadNotifications = async () => {
+    try {
+      const logs = await fetchAuditLogs();
+      const derived = (logs || []).slice(0, 20).map((log: any, idx: number) => {
+        const isBlocked = log.event_type?.includes("BLOCK");
+        const isEscalated = log.event_type?.includes("ESCALAT") || log.event_type?.includes("HUMAN");
+        const isSuccess = log.event_type?.includes("RELEASE") || log.event_type?.includes("APPROV");
+        return {
+          id: log.id || String(idx),
+          type: isBlocked ? "blocked" : isEscalated ? "escalated" : isSuccess ? "success" : "info",
+          title: `${log.actor}: ${log.event_type}`,
+          desc: log.payload?.reason || log.payload?.summary || `Audit record sequenced at block #${log.sequence_number || idx + 1}.`,
+          time: log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "Recent",
+          read: false,
+        };
+      });
+      setNotifications(derived);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+    const unsub = subscribeToStream(() => {
+      loadNotifications();
+    });
+    return unsub;
+  }, []);
 
   const markAllRead = () => {
     setNotifications(notifications.map((n) => ({ ...n, read: true })));
@@ -55,13 +64,15 @@ export default function NotificationsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={markAllRead}
-            className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-mono text-neutral-300"
+            disabled={notifications.length === 0}
+            className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-mono text-neutral-300 disabled:opacity-50"
           >
             Mark All Read
           </button>
           <button
             onClick={clearAll}
-            className="p-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-neutral-400 hover:text-white"
+            disabled={notifications.length === 0}
+            className="p-1.5 rounded-xl bg-white/[0.06] hover:bg-rose-500/20 text-neutral-400 hover:text-rose-400 disabled:opacity-50"
             title="Clear all"
           >
             <Trash2 className="w-4 h-4" />
@@ -70,25 +81,29 @@ export default function NotificationsPage() {
       </div>
 
       <div className="space-y-3">
-        {notifications.length === 0 ? (
+        {loading ? (
           <GlassCard className="p-8 text-center text-xs font-mono text-neutral-400">
-            No notifications in your inbox.
+            Loading activity notifications...
+          </GlassCard>
+        ) : notifications.length === 0 ? (
+          <GlassCard className="p-8 text-center text-xs font-mono text-neutral-400">
+            No recent activity alerts. Gateway decisions and escrow transitions will appear here.
           </GlassCard>
         ) : (
           notifications.map((n) => (
             <GlassCard
               key={n.id}
-              className={`p-4 flex items-start gap-3.5 transition-all ${
-                !n.read ? "border-cyan-500/30 bg-cyan-950/10" : ""
+              className={`p-4 flex items-start gap-4 transition-all ${
+                n.read ? "opacity-60" : "border-white/[0.15]"
               }`}
             >
               <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                className={`p-2 rounded-xl mt-0.5 ${
                   n.type === "blocked"
-                    ? "bg-rose-500/20 text-rose-400"
+                    ? "bg-rose-500/10 text-rose-400"
                     : n.type === "escalated"
-                    ? "bg-amber-500/20 text-amber-400"
-                    : "bg-emerald-500/20 text-emerald-400"
+                    ? "bg-amber-500/10 text-amber-400"
+                    : "bg-emerald-500/10 text-emerald-400"
                 }`}
               >
                 {n.type === "blocked" ? (
@@ -100,12 +115,12 @@ export default function NotificationsPage() {
                 )}
               </div>
 
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 space-y-1">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-white truncate">{n.title}</h4>
-                  <span className="text-[10px] font-mono text-neutral-500">{n.time}</span>
+                  <h4 className="text-xs font-semibold text-white font-mono">{n.title}</h4>
+                  <span className="text-[10px] text-neutral-500 font-mono">{n.time}</span>
                 </div>
-                <p className="text-xs text-neutral-300 mt-1 leading-relaxed">{n.desc}</p>
+                <p className="text-xs text-neutral-300 leading-relaxed font-sans">{n.desc}</p>
               </div>
             </GlassCard>
           ))
@@ -114,4 +129,3 @@ export default function NotificationsPage() {
     </div>
   );
 }
-

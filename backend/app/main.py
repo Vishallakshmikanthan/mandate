@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db import init_db
-from app.api import mandates, intents, escrows, scenarios, stream, audit, webhooks
+from app.api import mandates, intents, escrows, scenarios, stream, audit, webhooks, agents
 
 
 @asynccontextmanager
@@ -46,6 +46,7 @@ app.include_router(scenarios.router, prefix="/api")
 app.include_router(stream.router, prefix="/api")
 app.include_router(audit.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/api")
+app.include_router(agents.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["Health"])

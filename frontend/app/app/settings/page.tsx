@@ -18,26 +18,45 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { demoStore } from "@/lib/demo-store";
+import { fetchHealth, isDemoMode } from "@/lib/api";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<"appearance" | "paypal" | "keys" | "webhooks" | "danger">("appearance");
   const [isDark, setIsDark] = useState(true);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [health, setHealth] = useState<any>(null);
 
   // PayPal credentials state
-  const [clientId, setClientId] = useState("AYSq3RDGsmBLJE-otTkBtM-jBRd1TCQwFf9RG6Ht3LvKW3iEBqnWiZaFixPJFFrEWfcd6KTVwsAcEkDM");
-  const [clientSecret, setClientSecret] = useState("••••••••••••••••••••••••••••••••");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
   const [testingPayPal, setTestingPayPal] = useState(false);
   const [paypalSuccess, setPaypalSuccess] = useState<boolean | null>(null);
 
   // API Keys state
-  const [apiKeys, setApiKeys] = useState([
-    { id: "key_1", name: "Production Agent Gateway", key: "mk_live_9f81••••a3f9", created: "2026-11-01" },
-    { id: "key_2", name: "Staging Testbed", key: "mk_test_12a4••••e8b1", created: "2026-11-08" },
-  ]);
+  const [apiKeys, setApiKeys] = useState<any[]>([]);
   const [newKeyModal, setNewKeyModal] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    fetchHealth()
+      .then((h) => {
+        setHealth(h);
+        if (h.paypal_mode === "sandbox") {
+          setClientId("Configured in backend (.env)");
+          setClientSecret("••••••••••••••••••••••••");
+        } else {
+          setClientId("Simulation mode active");
+        }
+      })
+      .catch(() => {});
+
+    if (isDemoMode()) {
+      setApiKeys([
+        { id: "key_1", name: "Demo Agent Gateway", key: "mk_demo_9f81••••a3f9", created: "2026-11-01" },
+      ]);
+    }
+  }, []);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -351,24 +370,26 @@ export default function SettingsPage() {
             </button>
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/[0.08]">
-            <div>
-              <span className="text-xs font-semibold text-white block">Reset Demo Workspace</span>
-              <span className="text-[11px] text-neutral-400">
-                Restores sample agents, mandates, and scenario data to initial state.
-              </span>
+          {isDemoMode() && (
+            <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+              <div>
+                <span className="text-xs font-semibold text-white block">Reset Demo Workspace</span>
+                <span className="text-[11px] text-neutral-400">
+                  Restores sample agents, mandates, and scenario data to initial state.
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  demoStore.resetAll();
+                  window.location.reload();
+                }}
+                className="px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-mono text-white flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset State</span>
+              </button>
             </div>
-            <button
-              onClick={() => {
-                demoStore.resetAll();
-                window.location.reload();
-              }}
-              className="px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-mono text-white flex items-center gap-1.5"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset State</span>
-            </button>
-          </div>
+          )}
         </GlassCard>
       )}
     </div>

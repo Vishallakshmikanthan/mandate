@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Play } from "lucide-react";
+import { Play, RotateCw } from "lucide-react";
+import { runScenarioApi, subscribeToStream, fetchAuditLogs } from "@/lib/api";
 
 interface ScenarioState {
   id: "happy" | "attack" | "dispute";
+  apiKey: string;
   title: string;
   subtitle: string;
   buyerOffer: string;
@@ -15,12 +17,12 @@ interface ScenarioState {
   blockedBanner?: string;
   moneyFlow: { buyer: string; holdStatus: string; sellerStatus: string; progress: number };
   activeStep: number;
-  auditStream: { id: string; actor: string; event: string; status: string }[];
 }
 
-const SCENARIOS: Record<string, ScenarioState> = {
+const DEFAULT_SCENARIOS: Record<string, ScenarioState> = {
   attack: {
     id: "attack",
+    apiKey: "injection_attack",
     title: "Prompt-injection attack",
     subtitle: "A seller tries to override the rules.",
     buyerOffer: "Offer: $120.00 for the logo pack.",
@@ -40,14 +42,11 @@ const SCENARIOS: Record<string, ScenarioState> = {
       sellerStatus: "Unpaid",
       progress: 30,
     },
-    activeStep: 5,
-    auditStream: [
-      { id: "#30", actor: "GATEWAY", event: "ESCROW_BLOCKED", status: "Chained" },
-      { id: "#29", actor: "GATEWAY", event: "INTENT_EVALUATED", status: "Chained" },
-    ],
+    activeStep: 1,
   },
   happy: {
     id: "happy",
+    apiKey: "happy_path",
     title: "Happy path",
     subtitle: "Negotiate, hold, deliver, release.",
     buyerOffer: "Offer: $120.00 for the logo pack.",
@@ -67,13 +66,10 @@ const SCENARIOS: Record<string, ScenarioState> = {
       progress: 100,
     },
     activeStep: 7,
-    auditStream: [
-      { id: "#32", actor: "PAYPAL", event: "ESCROW_RELEASED", status: "Chained" },
-      { id: "#31", actor: "ARBITER", event: "ARBITER_VERDICT_PASS", status: "Chained" },
-    ],
   },
   dispute: {
     id: "dispute",
+    apiKey: "bad_delivery_dispute",
     title: "Bad delivery dispute",
     subtitle: "Arbiter rejects weak work.",
     buyerOffer: "Offer: $120.00 for the logo pack.",
@@ -93,10 +89,6 @@ const SCENARIOS: Record<string, ScenarioState> = {
       progress: 60,
     },
     activeStep: 6,
-    auditStream: [
-      { id: "#34", actor: "PAYPAL", event: "ESCROW_VOIDED", status: "Chained" },
-      { id: "#33", actor: "ARBITER", event: "ARBITER_VERDICT_FAIL", status: "Chained" },
-    ],
   },
 };
 
@@ -106,7 +98,65 @@ function ScenariosContent() {
   const initialKey = runParam === "happy_path" ? "happy" : runParam === "bad_delivery_dispute" ? "dispute" : "attack";
 
   const [activeKey, setActiveKey] = useState<string>(initialKey);
-  const current = SCENARIOS[activeKey] || SCENARIOS.attack;
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [lastResult, setLastResult] = useState<any>(null);
+  const [auditStream, setAuditStream] = useState<any[]>([]);
+
+  const current = DEFAULT_SCENARIOS[activeKey] || DEFAULT_SCENARIOS.attack;
+
+  const loadAudit = async () => {
+    try {
+      const logs = await fetchAuditLogs();
+      if (logs && logs.length > 0) {
+        setAuditStream(
+          logs.slice(0, 6).map((log: any) => ({
+            id: `#${log.sequence_number ?? log.id?.slice(0, 4)}`,
+            actor: log.actor || "GATEWAY",
+            event: log.event_type || "LOGGED",
+            status: "Chained",
+          }))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    loadAudit();
+    const unsub = subscribeToStream((event) => {
+      if (event.event_type) {
+        setAuditStream((prev) => [
+          {
+            id: `#${prev.length + 1}`,
+            actor: event.actor || "GATEWAY",
+            event: event.event_type,
+            status: "Chained",
+          },
+          ...prev.slice(0, 7),
+        ]);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleRunScenario = async (key: string) => {
+    setActiveKey(key);
+    const target = DEFAULT_SCENARIOS[key];
+    if (!target) return;
+    setIsRunning(true);
+    setLastResult(null);
+
+    try {
+      const res = await runScenarioApi(target.apiKey);
+      setLastResult(res);
+      await loadAudit();
+    } catch (err: any) {
+      alert(`Scenario run failed: ${err.message}`);
+    } finally {
+      setIsRunning(false);
+    }
+  };
 
   const steps = [
     { num: 1, label: "Intent received" },
@@ -117,6 +167,27 @@ function ScenariosContent() {
     { num: 6, label: "Arbitration" },
     { num: 7, label: "Released" },
   ];
+
+  // Derive step from result if available
+  const computedStep = lastResult
+    ? lastResult.decision === "BLOCKED"
+      ? 1
+      : lastResult.state === "RELEASED"
+      ? 7
+      : lastResult.state === "REFUNDED"
+      ? 6
+      : 4
+    : current.activeStep;
+
+  const bannerText = lastResult
+    ? lastResult.decision === "BLOCKED"
+      ? "BLOCKED · NO PAYPAL CALL MADE"
+      : lastResult.state === "RELEASED"
+      ? `APPROVED · RELEASED (${lastResult.paypal_capture_id || "PAYPAL CAPTURED"})`
+      : lastResult.state === "REFUNDED"
+      ? "VOIDED · BUYER REFUNDED"
+      : current.blockedBanner
+    : current.blockedBanner;
 
   return (
     <div className="space-y-6">
@@ -148,19 +219,28 @@ function ScenariosContent() {
           </div>
           <div className="pt-4">
             <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRunScenario("happy");
+              }}
+              disabled={isRunning}
               className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium transition ${
                 activeKey === "happy"
                   ? "bg-white text-neutral-900"
                   : "bg-white/[0.06] text-white hover:bg-white/[0.1] border border-white/[0.08]"
               }`}
             >
-              <Play className="w-3 h-3 fill-current" />
-              <span>Run</span>
+              {isRunning && activeKey === "happy" ? (
+                <RotateCw className="w-3 h-3 animate-spin" />
+              ) : (
+                <Play className="w-3 h-3 fill-current" />
+              )}
+              <span>{isRunning && activeKey === "happy" ? "Running..." : "Run"}</span>
             </button>
           </div>
         </div>
 
-        {/* Scenario B: Prompt-injection attack (Active in redesign) */}
+        {/* Scenario B: Prompt-injection attack */}
         <div
           onClick={() => setActiveKey("attack")}
           className={`cursor-pointer rounded-2xl p-5 flex flex-col justify-between transition-all ${
@@ -178,14 +258,23 @@ function ScenariosContent() {
           </div>
           <div className="pt-4">
             <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRunScenario("attack");
+              }}
+              disabled={isRunning}
               className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold transition shadow-sm ${
                 activeKey === "attack"
                   ? "bg-white text-neutral-900 hover:bg-neutral-100"
                   : "bg-white/[0.06] text-white hover:bg-white/[0.1] border border-white/[0.08]"
               }`}
             >
-              <Play className="w-3 h-3 fill-current" />
-              <span>Run attack</span>
+              {isRunning && activeKey === "attack" ? (
+                <RotateCw className="w-3 h-3 animate-spin" />
+              ) : (
+                <Play className="w-3 h-3 fill-current" />
+              )}
+              <span>{isRunning && activeKey === "attack" ? "Running attack..." : "Run attack"}</span>
             </button>
           </div>
         </div>
@@ -208,14 +297,23 @@ function ScenariosContent() {
           </div>
           <div className="pt-4">
             <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRunScenario("dispute");
+              }}
+              disabled={isRunning}
               className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium transition ${
                 activeKey === "dispute"
                   ? "bg-white text-neutral-900"
                   : "bg-white/[0.06] text-white hover:bg-white/[0.1] border border-white/[0.08]"
               }`}
             >
-              <Play className="w-3 h-3 fill-current" />
-              <span>Run</span>
+              {isRunning && activeKey === "dispute" ? (
+                <RotateCw className="w-3 h-3 animate-spin" />
+              ) : (
+                <Play className="w-3 h-3 fill-current" />
+              )}
+              <span>{isRunning && activeKey === "dispute" ? "Running..." : "Run"}</span>
             </button>
           </div>
         </div>
@@ -270,10 +368,10 @@ function ScenariosContent() {
             </div>
           </div>
 
-          {current.blockedBanner && (
+          {bannerText && (
             <div className="mt-4 py-3 px-4 rounded-xl bg-rose-500/10 border border-rose-500/25 text-center">
               <span className="text-xs font-bold tracking-wider text-rose-300">
-                {current.blockedBanner}
+                {bannerText}
               </span>
             </div>
           )}
@@ -303,14 +401,14 @@ function ScenariosContent() {
               <div className="flex items-center justify-between text-xs pt-1">
                 <span className="text-neutral-300">PayPal hold</span>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] bg-white/[0.05] border border-white/[0.08] text-neutral-300">
-                  {current.moneyFlow.holdStatus}
+                  {lastResult ? (lastResult.decision === "BLOCKED" ? "No Hold" : lastResult.state) : current.moneyFlow.holdStatus}
                 </span>
               </div>
 
               <div className="flex items-center justify-between text-xs">
                 <span className="text-neutral-300">Seller</span>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] bg-white/[0.05] border border-white/[0.08] text-neutral-300">
-                  {current.moneyFlow.sellerStatus}
+                  {lastResult ? (lastResult.state === "RELEASED" ? "Paid" : "Unpaid") : current.moneyFlow.sellerStatus}
                 </span>
               </div>
             </div>
@@ -323,18 +421,17 @@ function ScenariosContent() {
         <span className="text-xs text-neutral-400 font-normal">Escrow state</span>
 
         <div className="relative pt-2 pb-1">
-          {/* Connecting line */}
           <div className="absolute top-[18px] left-6 right-6 h-[2px] bg-white/[0.1] -z-0">
             <div
               className="h-full bg-white transition-all duration-500"
-              style={{ width: `${((current.activeStep - 1) / (steps.length - 1)) * 100}%` }}
+              style={{ width: `${((computedStep - 1) / (steps.length - 1)) * 100}%` }}
             />
           </div>
 
           <div className="flex items-center justify-between relative z-10">
             {steps.map((st) => {
-              const isPassed = st.num < current.activeStep;
-              const isCurrent = st.num === current.activeStep;
+              const isPassed = st.num < computedStep;
+              const isCurrent = st.num === computedStep;
               return (
                 <div key={st.num} className="flex flex-col items-center gap-2">
                   <div
@@ -365,22 +462,28 @@ function ScenariosContent() {
       {/* Live audit stream Card */}
       <div className="rounded-2xl bg-[#142225]/85 backdrop-blur-xl border border-white/[0.08] p-5 space-y-3">
         <span className="text-xs text-neutral-400 font-normal">Live audit stream</span>
-        <div className="space-y-2 pt-1">
-          {current.auditStream.map((item, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0 text-xs"
-            >
-              <div className="flex items-center gap-4">
-                <span className="font-mono text-neutral-400 font-medium">{item.id} {item.actor}</span>
-                <span className="font-mono text-neutral-200">{item.event}</span>
+        {auditStream.length === 0 ? (
+          <div className="py-6 text-center text-xs text-neutral-400 font-mono">
+            No audit events emitted yet. Run a scenario above to observe real-time audit hashing.
+          </div>
+        ) : (
+          <div className="space-y-2 pt-1">
+            {auditStream.map((item, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0 text-xs"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="font-mono text-neutral-400 font-medium">{item.id} {item.actor}</span>
+                  <span className="font-mono text-neutral-200">{item.event}</span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  {item.status}
+                </span>
               </div>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                {item.status}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

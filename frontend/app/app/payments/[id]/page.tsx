@@ -18,18 +18,32 @@ import {
   Bot,
   ExternalLink,
 } from "lucide-react";
-import { demoStore, PaymentIntentItem } from "@/lib/demo-store";
+import { fetchPayment } from "@/lib/api";
+import { PaymentIntentItem } from "@/lib/demo-store";
 import { formatMoney } from "@/lib/money";
 
 export default function PaymentDetailPage() {
   const params = useParams();
   const paymentId = params.id as string;
   const [payment, setPayment] = useState<PaymentIntentItem | null>(null);
+  const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
-    const found = demoStore.getPayments().find((p) => p.id === paymentId);
-    setPayment(found || null);
+    let mounted = true;
+    fetchPayment(paymentId)
+      .then((data) => {
+        if (mounted) setPayment(data);
+      })
+      .catch((err) => {
+        console.error(err);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, [paymentId]);
 
   const copyToClipboard = (text: string, id: string) => {
@@ -37,6 +51,14 @@ export default function PaymentDetailPage() {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 text-center text-xs text-neutral-400 font-mono">
+        Loading payment intent details...
+      </div>
+    );
+  }
 
   if (!payment) {
     return (

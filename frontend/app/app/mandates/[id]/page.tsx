@@ -15,7 +15,8 @@ import {
   AlertTriangle,
   Lock,
 } from "lucide-react";
-import { demoStore, MandateItem } from "@/lib/demo-store";
+import { fetchMandate, revokeMandate } from "@/lib/api";
+import { MandateItem } from "@/lib/demo-store";
 import { formatMoney } from "@/lib/money";
 
 export default function MandateDetailPage() {
@@ -23,24 +24,48 @@ export default function MandateDetailPage() {
   const mandateId = params.id as string;
   const router = useRouter();
   const [mandate, setMandate] = useState<MandateItem | null>(null);
+  const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState(false);
 
   useEffect(() => {
-    const found = demoStore.getMandates().find((m) => m.id === mandateId);
-    setMandate(found || null);
+    let mounted = true;
+    fetchMandate(mandateId)
+      .then((data) => {
+        if (mounted) setMandate(data);
+      })
+      .catch((err) => {
+        console.error(err);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, [mandateId]);
 
-  const handleRevoke = () => {
+  const handleRevoke = async () => {
     if (confirm("Are you sure you want to revoke this mandate? In-flight and subsequent intents will be halted at Rule R1.")) {
       setRevoking(true);
-      demoStore.revokeMandate(mandateId);
-      setTimeout(() => {
+      try {
+        await revokeMandate(mandateId);
+        const updated = await fetchMandate(mandateId);
+        setMandate(updated);
+      } catch (err: any) {
+        alert(`Failed to revoke mandate: ${err.message}`);
+      } finally {
         setRevoking(false);
-        const updated = demoStore.getMandates().find((m) => m.id === mandateId);
-        setMandate(updated || null);
-      }, 500);
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 text-center text-xs text-neutral-400 font-mono">
+        Loading mandate details...
+      </div>
+    );
+  }
 
   if (!mandate) {
     return (

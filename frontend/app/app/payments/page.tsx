@@ -2,15 +2,30 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { demoStore, PaymentIntentItem } from "@/lib/demo-store";
+import { fetchPayments, subscribeToStream } from "@/lib/api";
+import { PaymentIntentItem } from "@/lib/demo-store";
 import { formatMoney } from "@/lib/money";
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<PaymentIntentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = async () => {
+    try {
+      const data = await fetchPayments();
+      setPayments(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setPayments(demoStore.getPayments());
-    const unsub = demoStore.subscribe(() => setPayments(demoStore.getPayments()));
+    loadData();
+    const unsub = subscribeToStream(() => {
+      loadData();
+    });
     return unsub;
   }, []);
 
@@ -33,58 +48,71 @@ export default function PaymentsPage() {
       <div className="rounded-2xl bg-[#142225]/85 backdrop-blur-xl border border-white/[0.08] p-6 space-y-4">
         <span className="text-xs text-neutral-400 font-normal">Transaction history</span>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-white/[0.06] text-neutral-400">
-                <th className="font-normal py-2.5">Intent ID</th>
-                <th className="font-normal py-2.5">Agent</th>
-                <th className="font-normal py-2.5">Counterparty</th>
-                <th className="font-normal py-2.5">Amount</th>
-                <th className="font-normal py-2.5">Risk</th>
-                <th className="font-normal py-2.5">Decision</th>
-                <th className="font-normal py-2.5 text-right">Escrow</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((p) => (
-                <tr key={p.id} className="border-b border-white/[0.04] last:border-0">
-                  <td className="py-3.5 font-mono text-neutral-400 font-medium">
-                    <Link href={`/app/payments/${p.id}`} className="hover:text-white transition">
-                      {p.id.slice(0, 14)}...
-                    </Link>
-                  </td>
-                  <td className="py-3.5 text-neutral-300">{p.agent_id}</td>
-                  <td className="py-3.5 text-neutral-200">{p.counterparty}</td>
-                  <td className="py-3.5 font-mono text-white font-medium">{formatMoney(p.amount_minor)}</td>
-                  <td className="py-3.5 font-mono text-neutral-300">{(p.risk_score * 100).toFixed(0)}%</td>
-                  <td className="py-3.5">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
-                        p.decision === "APPROVED"
-                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                          : p.decision === "BLOCKED"
-                          ? "bg-rose-500/10 text-rose-300 border border-rose-500/25"
-                          : "bg-amber-500/10 text-amber-300 border border-amber-500/25"
-                      }`}
-                    >
-                      {p.decision}
-                    </span>
-                  </td>
-                  <td className="py-3.5 text-right font-mono text-neutral-400">
-                    {p.escrow_id ? (
-                      <Link href={`/app/escrows/${p.escrow_id}`} className="hover:text-white underline">
-                        {p.escrow_id.slice(0, 12)}...
-                      </Link>
-                    ) : (
-                      "None"
-                    )}
-                  </td>
+        {loading ? (
+          <div className="py-12 text-center text-xs text-neutral-400 font-mono">
+            Loading payment intents...
+          </div>
+        ) : payments.length === 0 ? (
+          <div className="py-12 text-center space-y-2">
+            <span className="text-sm text-neutral-200 font-medium block">No payment intents found</span>
+            <p className="text-xs text-neutral-400">
+              When an autonomous agent submits a payment intent to the gateway, its deterministic rule evaluation will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-white/[0.06] text-neutral-400">
+                  <th className="font-normal py-2.5">Intent ID</th>
+                  <th className="font-normal py-2.5">Agent</th>
+                  <th className="font-normal py-2.5">Counterparty</th>
+                  <th className="font-normal py-2.5">Amount</th>
+                  <th className="font-normal py-2.5">Risk</th>
+                  <th className="font-normal py-2.5">Decision</th>
+                  <th className="font-normal py-2.5 text-right">Escrow</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {payments.map((p) => (
+                  <tr key={p.id} className="border-b border-white/[0.04] last:border-0">
+                    <td className="py-3.5 font-mono text-neutral-400 font-medium">
+                      <Link href={`/app/payments/${p.id}`} className="hover:text-white transition">
+                        {p.id.slice(0, 14)}...
+                      </Link>
+                    </td>
+                    <td className="py-3.5 text-neutral-300">{p.agent_id || "buyer_agent"}</td>
+                    <td className="py-3.5 text-neutral-200">{p.counterparty}</td>
+                    <td className="py-3.5 font-mono text-white font-medium">{formatMoney(p.amount_minor)}</td>
+                    <td className="py-3.5 font-mono text-neutral-300">{(p.risk_score * 100).toFixed(0)}%</td>
+                    <td className="py-3.5">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
+                          p.decision === "APPROVED"
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : p.decision === "BLOCKED"
+                            ? "bg-rose-500/10 text-rose-300 border border-rose-500/25"
+                            : "bg-amber-500/10 text-amber-300 border border-amber-500/25"
+                        }`}
+                      >
+                        {p.decision}
+                      </span>
+                    </td>
+                    <td className="py-3.5 text-right font-mono text-neutral-400">
+                      {p.escrow_id ? (
+                        <Link href={`/app/escrows/${p.escrow_id}`} className="hover:text-white underline">
+                          {p.escrow_id.slice(0, 12)}...
+                        </Link>
+                      ) : (
+                        "None"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

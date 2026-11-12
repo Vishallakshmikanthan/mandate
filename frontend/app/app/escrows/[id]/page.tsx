@@ -1,83 +1,181 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
+import { fetchEscrow, arbitrateEscrow, humanDecisionEscrow, subscribeToStream } from "@/lib/api";
+import { EscrowItem } from "@/lib/demo-store";
+import { formatMoney } from "@/lib/money";
 
 export default function EscrowDetailPage() {
-  const [activeStep, setActiveStep] = useState(6);
+  const params = useParams();
+  const escrowId = (params?.id as string) || "";
+  const [escrow, setEscrow] = useState<EscrowItem | any>(null);
+  const [loading, setLoading] = useState(true);
   const [isArbitrating, setIsArbitrating] = useState(false);
-  const [overrideActive, setOverrideActive] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const steps = [
-    { num: 1, label: "Intent received" },
-    { num: 2, label: "Order created" },
-    { num: 3, label: "Buyer approved" },
-    { num: 4, label: "Funds held" },
-    { num: 5, label: "Delivered" },
-    { num: 6, label: "Arbitration" },
-    { num: 7, label: "Released" },
+    { num: 1, label: "Intent received", state: "INTENT_RECEIVED" },
+    { num: 2, label: "Order created", state: "ORDER_CREATED" },
+    { num: 3, label: "Buyer approved", state: "BUYER_APPROVED" },
+    { num: 4, label: "Funds held", state: "FUNDS_HELD" },
+    { num: 5, label: "Delivered", state: "DELIVERED" },
+    { num: 6, label: "Arbitration", state: "UNDER_ARBITRATION" },
+    { num: 7, label: "Released", state: "RELEASED" },
   ];
 
-  const criteria = [
-    { text: "Includes 3 logo variants", met: true },
-    { text: "Includes source files", met: true },
-    { text: "Delivered within deadline", met: false },
-  ];
-
-  const timelineEvents = [
-    { event: "ESCROW_FUNDS_HELD", source: "PayPal" },
-    { event: "ESCROW_DELIVERED", source: "Seller agent" },
-    { event: "ESCROW_UNDER_ARBITRATION", source: "Arbiter" },
-  ];
-
-  const handleRunArbiter = () => {
-    setIsArbitrating(true);
-    setTimeout(() => {
-      setIsArbitrating(false);
-      setActiveStep(7);
-      alert("AI Arbiter evaluation complete: Verdict PASS (Score 0.88). Funds captured and released via PayPal Orders v2!");
-    }, 1200);
+  const getActiveStep = (state: string): number => {
+    switch (state) {
+      case "INTENT_RECEIVED": return 1;
+      case "ORDER_CREATED": return 2;
+      case "BUYER_APPROVED": return 3;
+      case "FUNDS_HELD": return 4;
+      case "DELIVERED": return 5;
+      case "UNDER_ARBITRATION":
+      case "NEEDS_HUMAN": return 6;
+      case "RELEASED":
+      case "PARTIALLY_RELEASED":
+      case "SETTLED": return 7;
+      case "REFUNDED":
+      case "VOIDED": return 6;
+      default: return 4;
+    }
   };
+
+  const loadEscrow = async () => {
+    if (!escrowId) return;
+    try {
+      const data = await fetchEscrow(escrowId);
+      setEscrow(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadEscrow();
+    const unsub = subscribeToStream(() => {
+      loadEscrow();
+    });
+    return unsub;
+  }, [escrowId]);
+
+  const handleRunArbiter = async () => {
+    if (!escrowId) return;
+    setIsArbitrating(true);
+    setActionMessage(null);
+    try {
+      const res = await arbitrateEscrow(escrowId);
+      setEscrow((prev: any) => ({ ...prev, ...res }));
+      setActionMessage(`AI Arbiter completed evaluation: ${res.verdict?.verdict || "Evaluated"}`);
+    } catch (err: any) {
+      setActionMessage(`Arbitration error: ${err.message}`);
+    } finally {
+      setIsArbitrating(false);
+    }
+  };
+
+  const handleHumanDecision = async (action: "APPROVE" | "REJECT") => {
+    if (!escrowId) return;
+    try {
+      const res = await humanDecisionEscrow(escrowId, action, "Manual human decision via dashboard");
+      setEscrow((prev: any) => ({ ...prev, ...res }));
+      setActionMessage(`Human decision '${action}' recorded successfully.`);
+    } catch (err: any) {
+      setActionMessage(`Human decision error: ${err.message}`);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="py-16 text-center text-xs text-neutral-400 font-mono">
+        Loading escrow details...
+      </div>
+    );
+  }
+
+  if (!escrow) {
+    return (
+      <div className="rounded-2xl bg-[#142225]/85 backdrop-blur-xl border border-white/[0.08] p-12 text-center space-y-4">
+        <h2 className="text-xl font-semibold text-white">Escrow Not Found</h2>
+        <p className="text-xs text-neutral-400">
+          The requested escrow ID does not exist or has not been created yet.
+        </p>
+        <Link
+          href="/app/escrows"
+          className="inline-block px-4 py-2 rounded-full text-xs font-semibold bg-white text-neutral-900 hover:bg-neutral-100"
+        >
+          Return to escrows
+        </Link>
+      </div>
+    );
+  }
+
+  const activeStep = getActiveStep(escrow.state);
+  const amountMinor = escrow.amount_minor || escrow.spec?.amount_minor || 12000;
+  const isSettled = escrow.state === "RELEASED" || escrow.state === "SETTLED";
+  const isVoided = escrow.state === "REFUNDED" || escrow.state === "VOIDED";
+
+  const latestVerdict = escrow.verdicts && escrow.verdicts.length > 0 ? escrow.verdicts[escrow.verdicts.length - 1] : escrow.verdict;
+  const criteriaResults = latestVerdict?.criteria_results || [
+    { criterion: "Deliverable matches contract specifications", met: isSettled },
+    { criterion: "Files delivered within agreed timeframe", met: !isVoided },
+  ];
 
   return (
     <div className="space-y-6">
       {/* Title & Action Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <span className="text-xs text-neutral-400 font-normal">Escrow · PayPal Orders v2</span>
+          <div className="flex items-center gap-2">
+            <Link href="/app/escrows" className="text-xs text-neutral-400 hover:text-white transition">
+              ← Escrows
+            </Link>
+            <span className="text-neutral-600">/</span>
+            <span className="text-xs text-neutral-400 font-mono">{escrow.id}</span>
+          </div>
           <h1 className="text-3xl sm:text-4xl font-light text-white tracking-tight">
-            $120.00 logo pack
+            {formatMoney(amountMinor)} escrow hold
           </h1>
         </div>
 
         {/* Action Buttons on Right */}
         <div className="flex items-center gap-3">
           <span className="px-3.5 py-1.5 rounded-full text-xs text-neutral-300 bg-white/[0.04] border border-white/[0.08]">
-            {activeStep === 7 ? "Settled" : "Under arbitration"}
+            {escrow.state}
           </span>
 
           <button
-            onClick={() => {
-              setOverrideActive(!overrideActive);
-              alert("Human override mode toggled. Principal approval active.");
-            }}
+            onClick={() => handleHumanDecision(isSettled ? "REJECT" : "APPROVE")}
             className="px-4 py-2 rounded-full text-xs font-normal text-neutral-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition"
           >
-            Human override
+            Human {isSettled ? "refund" : "override release"}
           </button>
 
           <button
             onClick={handleRunArbiter}
+            disabled={isArbitrating || isSettled || isVoided}
             className={`px-5 py-2 rounded-full text-xs font-semibold transition shadow-sm ${
-              activeStep === 7
-                ? "bg-emerald-500 text-white"
+              isSettled
+                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                : isVoided
+                ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
                 : "bg-white text-neutral-900 hover:bg-neutral-100"
             }`}
           >
-            {isArbitrating ? "Arbitrating..." : activeStep === 7 ? "Released ✓" : "Run arbiter"}
+            {isArbitrating ? "Arbitrating..." : isSettled ? "Released ✓" : isVoided ? "Voided" : "Run arbiter"}
           </button>
         </div>
       </div>
+
+      {actionMessage && (
+        <div className="p-3 rounded-xl bg-white/[0.06] border border-white/[0.1] text-xs font-mono text-cyan-300">
+          {actionMessage}
+        </div>
+      )}
 
       {/* 7-Step Horizontal Stepper */}
       <div className="rounded-2xl bg-[#142225]/85 backdrop-blur-xl border border-white/[0.08] p-5 space-y-4">
@@ -130,46 +228,46 @@ export default function EscrowDetailPage() {
 
             {/* 3 Connected Stage Boxes */}
             <div className="flex items-center justify-between gap-3 pt-2">
-              {/* Buyer Box */}
               <div className="flex-1 rounded-xl bg-[#0f191b]/90 border border-white/[0.06] p-4 text-center space-y-1">
                 <span className="text-xs text-neutral-300 block">Buyer agent</span>
-                <span className="font-mono text-sm text-white font-medium">$120.00</span>
+                <span className="font-mono text-sm text-white font-medium">{formatMoney(amountMinor)}</span>
               </div>
 
-              {/* Dashed connector line */}
               <div className="text-neutral-400 font-mono text-xs tracking-widest">-------</div>
 
-              {/* PayPal Hold Box (Highlighted) */}
               <div className="flex-1 rounded-xl bg-[#0f191b]/95 border border-white/40 p-4 text-center space-y-1 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
                 <span className="text-xs text-neutral-200 block font-medium">PayPal hold</span>
-                <span className="text-xs text-neutral-300 block">Authorized</span>
+                <span className="text-xs text-neutral-300 block">{escrow.state}</span>
               </div>
 
-              {/* Dashed connector line */}
               <div className="text-neutral-400 font-mono text-xs tracking-widest">-------</div>
 
-              {/* Seller Box */}
               <div className="flex-1 rounded-xl bg-[#0f191b]/90 border border-white/[0.06] p-4 text-center space-y-1">
                 <span className="text-xs text-neutral-300 block">Seller</span>
-                <span className="text-xs text-neutral-400 block">Awaiting</span>
+                <span className="text-xs text-neutral-400 block">
+                  {isSettled ? "Paid " + formatMoney(amountMinor) : isVoided ? "Refunded" : "Awaiting release"}
+                </span>
               </div>
             </div>
           </div>
 
           <p className="text-xs text-neutral-400 font-normal">
-            Funds are held, not sent. Capture releases to the seller; void returns them to the buyer.
+            PayPal Order: <span className="font-mono text-neutral-300">{escrow.paypal_order_id || "Simulated"}</span> · 
+            Auth ID: <span className="font-mono text-neutral-300">{escrow.paypal_authorization_id || "None"}</span>
           </p>
         </div>
 
         {/* Right: Arbiter verdict Card */}
         <div className="rounded-2xl bg-[#142225]/85 backdrop-blur-xl border border-white/[0.08] p-6 flex flex-col justify-between min-h-[220px] space-y-6">
           <div className="space-y-3">
-            <span className="text-xs text-neutral-400 font-normal">Arbiter verdict · sample</span>
+            <span className="text-xs text-neutral-400 font-normal">
+              Arbiter verdict {latestVerdict ? `· ${latestVerdict.verdict}` : "· Pending"}
+            </span>
 
             <div className="space-y-2 pt-1">
-              {criteria.map((cr, idx) => (
+              {criteriaResults.map((cr: any, idx: number) => (
                 <div key={idx} className="flex items-center justify-between py-1 text-xs">
-                  <span className="text-neutral-200">{cr.text}</span>
+                  <span className="text-neutral-200">{cr.criterion || cr.text}</span>
                   <span
                     className={`px-3 py-0.5 rounded-full text-[11px] font-medium ${
                       cr.met
@@ -184,36 +282,34 @@ export default function EscrowDetailPage() {
             </div>
           </div>
 
-          {/* Confidence Slider / Bar */}
           <div className="space-y-2">
             <span className="text-xs text-neutral-400 font-normal block">
-              Confidence · below threshold escalates to a human
+              Confidence score: {latestVerdict ? `${((latestVerdict.confidence || 0.88) * 100).toFixed(0)}%` : "N/A"}
             </span>
             <div className="w-full h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
-              <div className="h-full bg-white rounded-full w-[82%]" />
+              <div
+                className="h-full bg-white rounded-full transition-all"
+                style={{ width: `${((latestVerdict?.confidence || 0.88) * 100)}%` }}
+              />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Bottom Timeline Card */}
-      <div className="rounded-2xl bg-[#142225]/85 backdrop-blur-xl border border-white/[0.08] p-6 space-y-4">
-        <span className="text-xs text-neutral-400 font-normal">Timeline</span>
-
-        <div className="space-y-3 pt-1">
-          {timelineEvents.map((ev, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0 text-xs"
-            >
-              <span className="font-mono text-neutral-200">{ev.event}</span>
-              <span className="px-3 py-1 rounded-full text-[11px] text-neutral-300 bg-white/[0.04] border border-white/[0.08]">
-                {ev.source}
-              </span>
-            </div>
-          ))}
+      {/* Deliverables section if any */}
+      {escrow.deliverables && escrow.deliverables.length > 0 && (
+        <div className="rounded-2xl bg-[#142225]/85 backdrop-blur-xl border border-white/[0.08] p-6 space-y-3">
+          <span className="text-xs text-neutral-400 font-normal">Submitted Deliverables</span>
+          <div className="space-y-2">
+            {escrow.deliverables.map((d: any) => (
+              <div key={d.id} className="p-3 rounded-xl bg-[#0f191b]/90 border border-white/[0.06] text-xs space-y-1">
+                <span className="font-mono text-neutral-300 font-medium">{d.content_ref}</span>
+                {d.submission_notes && <p className="text-neutral-400">{d.submission_notes}</p>}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

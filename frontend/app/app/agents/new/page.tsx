@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { GlassCard } from "@/components/glass/GlassCard";
 import { Bot, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
-import { demoStore, Agent } from "@/lib/demo-store";
+import { createMandate } from "@/lib/api";
+import { Agent } from "@/lib/demo-store";
 
 export default function NewAgentPage() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function NewAgentPage() {
     setId(slug ? `${slug}_agent` : "");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || name.length < 3 || name.length > 40) {
       setError("Agent name must be between 3 and 40 characters.");
@@ -38,22 +39,31 @@ export default function NewAgentPage() {
     }
 
     setLoading(true);
-    const newAgent: Agent = {
-      id: id.trim(),
-      name: name.trim(),
-      description: description.trim() || "Autonomous agent initialized under Mandate governance.",
-      type,
-      status: "ACTIVE",
-      total_spend_minor: 0,
-      tx_count: 0,
-      created_at: new Date().toISOString(),
-    };
-
-    demoStore.addAgent(newAgent);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await createMandate({
+        owner_id: "usr_principal_1",
+        agent_id: id.trim(),
+        policy: {
+          name: `${name.trim()} Mandate`,
+          max_total_minor: 50000,
+          max_per_transaction_minor: 20000,
+          daily_limit_minor: 50000,
+          escalate_above_minor: 15000,
+          allowed_counterparties: ["seller_agent_acme"],
+          blocked_counterparties: ["unverified_seller_66"],
+          allowed_merchant_categories: ["freelance_design", "software_services"],
+          velocity: { max_txns_per_hour: 5 },
+          allowed_hours_utc: { start: "00:00", end: "23:59" },
+          require_escrow: true,
+          currency: "USD",
+        },
+      });
       router.push("/app/agents");
-    }, 400);
+    } catch (err: any) {
+      setError(`Failed to register agent: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

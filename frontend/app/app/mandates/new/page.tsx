@@ -1,11 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, ArrowRight } from "lucide-react";
+import { createMandate, fetchMandates, revokeMandate, subscribeToStream } from "@/lib/api";
+import { MandateItem } from "@/lib/demo-store";
+import { formatMoney, toMinorUnits } from "@/lib/money";
 
 export default function MandateBuilderPage() {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(3);
+  const [agentId, setAgentId] = useState("buyer_agent_alpha");
+  const [mandateName, setMandateName] = useState("Autonomous Procurement Mandate");
   const [allowedCounterparties, setAllowedCounterparties] = useState(["seller_agent_acme"]);
   const [blockedCounterparties, setBlockedCounterparties] = useState(["unverified_seller_66"]);
   const [categories, setCategories] = useState(["freelance_design", "software_services"]);
@@ -13,8 +20,25 @@ export default function MandateBuilderPage() {
   const [maxTxnsPerHour, setMaxTxnsPerHour] = useState("5");
   const [perTxnCap, setPerTxnCap] = useState("200.00");
   const [totalBudget, setTotalBudget] = useState("500.00");
-  const [isSigned, setIsSigned] = useState(false);
-  const [isKilled, setIsKilled] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
+  const [mandates, setMandates] = useState<MandateItem[]>([]);
+
+  const loadMandates = async () => {
+    try {
+      const data = await fetchMandates();
+      setMandates(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    loadMandates();
+    const unsub = subscribeToStream(() => {
+      loadMandates();
+    });
+    return unsub;
+  }, []);
 
   const steps = [
     { num: 1, label: "Basics" },
@@ -25,11 +49,35 @@ export default function MandateBuilderPage() {
   ];
 
   const jsonPolicy = {
-    max_per_transaction: 20000,
-    escalate_above: 15000,
+    name: mandateName,
+    max_total_minor: toMinorUnits(totalBudget),
+    max_per_transaction_minor: toMinorUnits(perTxnCap),
+    daily_limit_minor: toMinorUnits(totalBudget),
+    escalate_above_minor: toMinorUnits(escalateAbove),
     allowed_counterparties: allowedCounterparties,
     blocked_counterparties: blockedCounterparties,
+    allowed_merchant_categories: categories,
+    velocity: { max_txns_per_hour: parseInt(maxTxnsPerHour) || 5 },
+    allowed_hours_utc: { start: "00:00", end: "23:59" },
     require_escrow: true,
+    currency: "USD",
+  };
+
+  const handleSignAndActivate = async () => {
+    setIsSigning(true);
+    try {
+      const created = await createMandate({
+        owner_id: "usr_principal_1",
+        agent_id: agentId,
+        policy: jsonPolicy,
+      });
+      alert(`Mandate successfully signed and activated! Mandate ID: ${created.id}`);
+      router.push(`/app/mandates/${created.id}`);
+    } catch (err: any) {
+      alert(`Failed to activate mandate: ${err.message}`);
+    } finally {
+      setIsSigning(false);
+    }
   };
 
   const removeCounterparty = (item: string) => {
@@ -257,14 +305,11 @@ export default function MandateBuilderPage() {
               </button>
 
               <button
-                onClick={() => setIsSigned(true)}
-                className={`px-5 py-2 rounded-full text-xs font-semibold transition shadow-sm ${
-                  isSigned
-                    ? "bg-emerald-500 text-white"
-                    : "bg-white text-neutral-900 hover:bg-neutral-100"
-                }`}
+                onClick={handleSignAndActivate}
+                disabled={isSigning}
+                className="px-5 py-2 rounded-full text-xs font-semibold transition shadow-sm bg-white text-neutral-900 hover:bg-neutral-100 disabled:opacity-50"
               >
-                {isSigned ? "Mandate Activated ✓" : "Sign and activate"}
+                {isSigning ? "Signing & Activating..." : "Sign and activate"}
               </button>
             </div>
           </div>
@@ -275,54 +320,83 @@ export default function MandateBuilderPage() {
       <div className="rounded-2xl bg-[#142225]/85 backdrop-blur-xl border border-white/[0.08] p-6 space-y-4">
         <span className="text-xs text-neutral-400 font-normal">Active mandates and spend</span>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-white/[0.06] text-neutral-400 pb-3">
-                <th className="font-normal py-2.5">Mandate</th>
-                <th className="font-normal py-2.5">Agent</th>
-                <th className="font-normal py-2.5">Per-txn cap</th>
-                <th className="font-normal py-2.5">Spend / budget</th>
-                <th className="font-normal py-2.5">Status</th>
-                <th className="font-normal py-2.5 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-white/[0.04]">
-                <td className="py-3.5 font-mono text-neutral-200">9ec90311-722c...ea6</td>
-                <td className="py-3.5 text-neutral-300">buyer_agent_alpha</td>
-                <td className="py-3.5 font-mono text-neutral-200">$200.00</td>
-                <td className="py-3.5">
-                  <div className="space-y-1 max-w-[140px]">
-                    <span className="font-mono text-neutral-200 text-[11px]">$480.00 / $500.00</span>
-                    <div className="w-full h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
-                      <div className="h-full bg-amber-400 rounded-full w-[96%]" />
-                    </div>
-                  </div>
-                </td>
-                <td className="py-3.5">
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
-                      isKilled
-                        ? "bg-rose-500/10 text-rose-300 border border-rose-500/25"
-                        : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                    }`}
-                  >
-                    {isKilled ? "Revoked" : "Active"}
-                  </span>
-                </td>
-                <td className="py-3.5 text-right">
-                  <button
-                    onClick={() => setIsKilled(!isKilled)}
-                    className="px-3.5 py-1.5 rounded-full text-xs text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition"
-                  >
-                    {isKilled ? "Restore" : "Kill switch"}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        {mandates.length === 0 ? (
+          <div className="py-8 text-center text-xs text-neutral-400 font-mono">
+            No mandates enrolled yet. Click &quot;Sign and activate&quot; above to create one.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-white/[0.06] text-neutral-400 pb-3">
+                  <th className="font-normal py-2.5">Mandate</th>
+                  <th className="font-normal py-2.5">Agent</th>
+                  <th className="font-normal py-2.5">Per-txn cap</th>
+                  <th className="font-normal py-2.5">Spend / budget</th>
+                  <th className="font-normal py-2.5">Status</th>
+                  <th className="font-normal py-2.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mandates.map((m) => {
+                  const maxTotal = m.policy?.max_total_minor || 50000;
+                  const perCap = m.policy?.max_per_transaction_minor || 20000;
+                  const spent = m.spent_to_date_minor || 0;
+                  const pct = Math.min(100, Math.round((spent / maxTotal) * 100));
+                  return (
+                    <tr key={m.id} className="border-b border-white/[0.04]">
+                      <td className="py-3.5 font-mono text-neutral-200">
+                        <Link href={`/app/mandates/${m.id}`} className="hover:text-white underline">
+                          {m.id.slice(0, 14)}...
+                        </Link>
+                      </td>
+                      <td className="py-3.5 text-neutral-300">{m.agent_id}</td>
+                      <td className="py-3.5 font-mono text-neutral-200">{formatMoney(perCap)}</td>
+                      <td className="py-3.5">
+                        <div className="space-y-1 max-w-[140px]">
+                          <span className="font-mono text-neutral-200 text-[11px]">
+                            {formatMoney(spent)} / {formatMoney(maxTotal)}
+                          </span>
+                          <div className="w-full h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
+                            m.status === "ACTIVE"
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              : "bg-rose-500/10 text-rose-300 border border-rose-500/25"
+                          }`}
+                        >
+                          {m.status}
+                        </span>
+                      </td>
+                      <td className="py-3.5 text-right">
+                        {m.status === "ACTIVE" ? (
+                          <button
+                            onClick={async () => {
+                              if (confirm("Revoke this mandate?")) {
+                                await revokeMandate(m.id);
+                                loadMandates();
+                              }
+                            }}
+                            className="px-3.5 py-1.5 rounded-full text-xs text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition"
+                          >
+                            Revoke
+                          </button>
+                        ) : (
+                          <span className="text-neutral-500 text-xs">Revoked</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,50 +1,81 @@
-import { demoStore, MandateItem, PaymentIntentItem, EscrowItem, AuditRecord } from "./demo-store";
+import { demoStore, MandateItem, PaymentIntentItem, EscrowItem, AuditRecord, Agent } from "./demo-store";
 
-const API_BASE = ""; // Relative to Next.js rewrites
+export const isDemoMode = (): boolean => {
+  return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+};
+
+// Use NEXT_PUBLIC_API_URL or relative /api via Next rewrite
+const getApiBase = (): string => {
+  if (typeof window !== "undefined") {
+    // Client-side: use Next.js rewrites so relative /api proxies properly
+    return "";
+  }
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+};
 
 export async function fetchHealth() {
   try {
-    const res = await fetch(`${API_BASE}/api/health`, { cache: "no-store" });
+    const res = await fetch(`${getApiBase()}/api/health`, { cache: "no-store" });
     if (!res.ok) throw new Error("Health check failed");
     return await res.json();
   } catch (err) {
-    return {
-      status: "simulation",
-      service: "mandate-gateway (demo mode)",
-      version: "1.0.0",
-      paypal_mode: "sandbox",
-      llm_provider: "gemini",
-      demo_replay_mode: true,
-    };
+    if (isDemoMode()) {
+      return {
+        status: "simulation",
+        service: "mandate-gateway (demo mode)",
+        version: "1.0.0",
+        paypal_mode: "sandbox",
+        llm_provider: "gemini",
+        demo_replay_mode: true,
+      };
+    }
+    throw err;
   }
 }
 
 export async function fetchMandates(): Promise<MandateItem[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/mandates`, { cache: "no-store" });
-    if (!res.ok) throw new Error("Failed to fetch mandates");
+    const res = await fetch(`${getApiBase()}/api/mandates`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Failed to fetch mandates: ${res.statusText}`);
     const data = await res.json();
-    return data.length > 0 ? data : demoStore.getMandates();
+    if (data && data.length > 0) return data;
+    return isDemoMode() ? demoStore.getMandates() : [];
   } catch (err) {
-    return demoStore.getMandates();
+    return isDemoMode() ? demoStore.getMandates() : [];
   }
 }
 
-export async function createMandate(payload: any): Promise<any> {
+export async function fetchMandate(mandateId: string): Promise<MandateItem | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/mandates`, {
+    const res = await fetch(`${getApiBase()}/api/mandates/${mandateId}`, { cache: "no-store" });
+    if (!res.ok) {
+      if (res.status === 404 && isDemoMode()) {
+        return demoStore.getMandates().find((m) => m.id === mandateId) || null;
+      }
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    return isDemoMode() ? (demoStore.getMandates().find((m) => m.id === mandateId) || null) : null;
+  }
+}
+
+export async function createMandate(payload: any): Promise<MandateItem> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/mandates`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (res.ok) {
       const data = await res.json();
-      demoStore.addMandate(data);
+      if (isDemoMode()) demoStore.addMandate(data);
       return data;
     }
-    throw new Error("Backend reject");
+    throw new Error(`Failed to create mandate: ${res.statusText}`);
   } catch (err) {
-    // Generate signature locally for offline demo mode
+    if (!isDemoMode()) throw err;
+    // Fallback for offline demo mode
     const sig = "hmac_sha256_" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
     const newMandate: MandateItem = {
       id: "mnd_" + Math.random().toString(36).substring(2, 9),
@@ -66,91 +97,177 @@ export async function createMandate(payload: any): Promise<any> {
 
 export async function revokeMandate(mandateId: string): Promise<any> {
   try {
-    const res = await fetch(`${API_BASE}/api/mandates/${mandateId}/revoke`, { method: "POST" });
+    const res = await fetch(`${getApiBase()}/api/mandates/${mandateId}/revoke`, { method: "POST" });
     if (res.ok) {
-      demoStore.revokeMandate(mandateId);
+      if (isDemoMode()) demoStore.revokeMandate(mandateId);
       return await res.json();
     }
   } catch (err) {
-    // fallback
+    if (!isDemoMode()) throw err;
   }
-  demoStore.revokeMandate(mandateId);
-  return { status: "REVOKED", id: mandateId };
+  if (isDemoMode()) {
+    demoStore.revokeMandate(mandateId);
+    return { status: "REVOKED", id: mandateId };
+  }
+  throw new Error("Failed to revoke mandate");
 }
 
 export async function fetchPayments(): Promise<PaymentIntentItem[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/intents`, { cache: "no-store" });
+    const res = await fetch(`${getApiBase()}/api/intents`, { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch intents");
     const data = await res.json();
-    return data.length > 0 ? data : demoStore.getPayments();
+    if (data && data.length > 0) return data;
+    return isDemoMode() ? demoStore.getPayments() : [];
   } catch (err) {
-    return demoStore.getPayments();
+    return isDemoMode() ? demoStore.getPayments() : [];
+  }
+}
+
+export async function fetchPayment(paymentId: string): Promise<PaymentIntentItem | null> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/intents/${paymentId}`, { cache: "no-store" });
+    if (!res.ok) {
+      if (res.status === 404 && isDemoMode()) {
+        return demoStore.getPayments().find((p) => p.id === paymentId) || null;
+      }
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    return isDemoMode() ? (demoStore.getPayments().find((p) => p.id === paymentId) || null) : null;
   }
 }
 
 export async function fetchEscrows(): Promise<EscrowItem[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/escrows`, { cache: "no-store" });
+    const res = await fetch(`${getApiBase()}/api/escrows`, { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch escrows");
     const data = await res.json();
-    return data.length > 0 ? data : demoStore.getEscrows();
+    if (data && data.length > 0) return data;
+    return isDemoMode() ? demoStore.getEscrows() : [];
   } catch (err) {
-    return demoStore.getEscrows();
+    return isDemoMode() ? demoStore.getEscrows() : [];
   }
+}
+
+export async function fetchEscrow(escrowId: string): Promise<EscrowItem | null> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/escrows/${escrowId}`, { cache: "no-store" });
+    if (!res.ok) {
+      if (res.status === 404 && isDemoMode()) {
+        return demoStore.getEscrows().find((e) => e.id === escrowId) || null;
+      }
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    return isDemoMode() ? (demoStore.getEscrows().find((e) => e.id === escrowId) || null) : null;
+  }
+}
+
+export async function arbitrateEscrow(escrowId: string): Promise<any> {
+  const res = await fetch(`${getApiBase()}/api/escrows/${escrowId}/arbitrate`, { method: "POST" });
+  if (!res.ok) throw new Error(`Arbitration failed: ${res.statusText}`);
+  return await res.json();
+}
+
+export async function humanDecisionEscrow(escrowId: string, action: string, notes: string = ""): Promise<any> {
+  const res = await fetch(`${getApiBase()}/api/escrows/${escrowId}/human-decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, notes }),
+  });
+  if (!res.ok) throw new Error(`Human decision failed: ${res.statusText}`);
+  return await res.json();
 }
 
 export async function fetchAuditLogs(): Promise<AuditRecord[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/audit`, { cache: "no-store" });
+    const res = await fetch(`${getApiBase()}/api/audit`, { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch audit");
     const data = await res.json();
-    return data.length > 0 ? data : demoStore.getAudit();
+    if (data && data.length > 0) return data;
+    return isDemoMode() ? demoStore.getAudit() : [];
   } catch (err) {
-    return demoStore.getAudit();
+    return isDemoMode() ? demoStore.getAudit() : [];
+  }
+}
+
+export async function verifyAudit(): Promise<{ valid: boolean; total_events: number; head_hash: string; message: string }> {
+  const res = await fetch(`${getApiBase()}/api/audit/verify`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Audit verification failed");
+  return await res.json();
+}
+
+export async function fetchAgents(): Promise<Agent[]> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/agents`, { cache: "no-store" });
+    if (!res.ok) throw new Error("Failed to fetch agents");
+    const data = await res.json();
+    if (data && data.length > 0) return data;
+    return isDemoMode() ? demoStore.getAgents() : [];
+  } catch (err) {
+    return isDemoMode() ? demoStore.getAgents() : [];
+  }
+}
+
+export async function fetchAgent(agentId: string): Promise<Agent | null> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/agents/${agentId}`, { cache: "no-store" });
+    if (!res.ok) {
+      if (res.status === 404 && isDemoMode()) {
+        return demoStore.getAgents().find((a) => a.id === agentId) || null;
+      }
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    return isDemoMode() ? (demoStore.getAgents().find((a) => a.id === agentId) || null) : null;
   }
 }
 
 export async function runScenarioApi(scenarioKey: string): Promise<any> {
-  try {
-    const res = await fetch(`${API_BASE}/api/scenarios/${scenarioKey}/run`, { method: "POST" });
-    if (res.ok) return await res.json();
-  } catch (err) {
-    // fallback simulated response
+  const res = await fetch(`${getApiBase()}/api/scenarios/${scenarioKey}/run`, { method: "POST" });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Scenario failed (${res.status}): ${errorText}`);
   }
-  if (scenarioKey === "happy_path") {
-    return {
-      scenario: "happy_path",
-      decision: "APPROVED",
-      escrow_state: "RELEASED",
-      risk_score: 0.05,
-      flags: [],
-      paypal_order_id: "ORDER_PP_789102",
-      paypal_authorization_id: "AUTH_PP_441209",
-      paypal_capture_id: "CAP_PP_990144",
-      amount_minor: 12000,
-    };
-  } else if (scenarioKey === "injection_attack") {
-    return {
-      scenario: "injection_attack",
-      decision: "BLOCKED",
-      escrow_state: null,
-      risk_score: 0.98,
-      flags: ["ADVERSARIAL_INJECTION_DETECTED", "OVER_TRANSACTION_CAP"],
-      paypal_order_id: null,
-      amount_minor: 90000,
-    };
-  } else {
-    return {
-      scenario: "bad_delivery_dispute",
-      decision: "APPROVED",
-      escrow_state: "REFUNDED",
-      risk_score: 0.12,
-      flags: ["ARBITER_REJECTED_DELIVERABLE"],
-      paypal_order_id: "ORDER_PP_331190",
-      paypal_authorization_id: "AUTH_PP_119033",
-      amount_minor: 12000,
-    };
-  }
+  return await res.json();
 }
 
+export async function fetchRedTeamStats(): Promise<any> {
+  const res = await fetch(`${getApiBase()}/api/scenarios/redteam/stats`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch red team stats");
+  return await res.json();
+}
+
+export async function runRedTeamApi(): Promise<any> {
+  const res = await fetch(`${getApiBase()}/api/scenarios/red_team/run`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to run red team suite");
+  return await res.json();
+}
+
+export function subscribeToStream(onEvent: (event: any) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  try {
+    const es = new EventSource(`${getApiBase()}/api/stream`);
+    es.onmessage = (e) => {
+      try {
+        const parsed = JSON.parse(e.data);
+        onEvent(parsed);
+      } catch (err) {
+        console.error("SSE parse error", err);
+      }
+    };
+    es.onerror = () => {
+      // EventSource automatically attempts reconnection
+    };
+    return () => {
+      es.close();
+    };
+  } catch (err) {
+    console.error("SSE subscription error", err);
+    return () => {};
+  }
+}
