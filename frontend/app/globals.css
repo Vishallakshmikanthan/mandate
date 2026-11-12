@@ -3,15 +3,172 @@
 @tailwind utilities;
 
 :root {
-  --background: #070a12;
-  --foreground: #f8fafc;
+  --bg-base: #0C1416;
+  --bg-elevated: #142124;
+  --glass-fill: rgba(20, 33, 36, 0.72);
+  --glass-fill-strong: rgba(26, 42, 46, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.16);
+  --text-primary: #FFFFFF;
+  --text-secondary: #9EAFB4;
+  --text-muted: #6C7E83;
+  --brand-1: #38BDF8;
+  --brand-2: #2DD4BF;
+  --brand-3: #818CF8;
+  --success: #34D399;
+  --warning: #FBBF24;
+  --danger: #F87171;
+  --info: #38BDF8;
+}
+
+html.light {
+  --bg-base: #F6F8FD;
+  --bg-elevated: #FFFFFF;
+  --glass-fill: rgba(255, 255, 255, 0.75);
+  --glass-fill-strong: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(20, 30, 60, 0.12);
+  --glass-border-strong: rgba(20, 30, 60, 0.22);
+  --text-primary: #0B1020;
+  --text-secondary: #4A546E;
+  --text-muted: #808BA0;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: -0.015em;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numbers for finance */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glassmorphism recipe per spec 2.3 */
+.glass {
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+    0 20px 50px -20px rgba(0, 0, 0, 0.55);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass:hover {
+  background: var(--glass-fill-strong);
+  border-color: var(--glass-border-strong);
+}
+
+.glass-card {
+  background: var(--glass-fill);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 12px 36px -12px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  background: var(--glass-fill-strong);
+  border-color: var(--glass-border-strong);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+
+.glass-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+/* Brand gradient text & backgrounds */
+.brand-gradient-text {
+  background: linear-gradient(135deg, #6C7BFF 0%, #22D3EE 50%, #A78BFA 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-gradient-bg {
+  background: linear-gradient(135deg, #6C7BFF 0%, #22D3EE 50%, #A78BFA 100%);
+}
+
+.brand-gradient-border {
+  border-image: linear-gradient(135deg, #6C7BFF, #22D3EE, #A78BFA) 1;
+}
+
+/* Aurora background blobs */
+.aurora-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.aurora-blob-1 {
+  position: absolute;
+  top: -15%;
+  left: 10%;
+  width: 55vw;
+  height: 55vw;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(108, 123, 255, 0.22) 0%, transparent 68%);
+  filter: blur(80px);
+  animation: drift 32s ease-in-out infinite alternate;
+}
+
+.aurora-blob-2 {
+  position: absolute;
+  top: 30%;
+  right: -10%;
+  width: 50vw;
+  height: 50vw;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.18) 0%, transparent 68%);
+  filter: blur(90px);
+  animation: driftReverse 28s ease-in-out infinite alternate;
+}
+
+.aurora-blob-3 {
+  position: absolute;
+  bottom: -15%;
+  left: 25%;
+  width: 60vw;
+  height: 60vw;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.16) 0%, transparent 68%);
+  filter: blur(100px);
+  animation: drift 40s ease-in-out infinite alternate;
+}
+
+/* Subtle noise texture */
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  opacity: 0.025;
+  pointer-events: none;
+  z-index: 1;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
 
 /* Custom scrollbars */
@@ -19,40 +176,58 @@ body {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: var(--bg-base);
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgba(255, 255, 255, 0.28);
 }
 
-/* Glassmorphism utility */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(51, 65, 85, 0.4);
+/* Shockwave animation on blocked attacks (Spec 3.3) */
+@keyframes shockwave {
+  0% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.8), 0 0 40px rgba(248, 113, 113, 0.4);
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.02) translateX(-3px);
+  }
+  50% {
+    transform: scale(1.02) translateX(3px);
+  }
+  70% {
+    transform: scale(1.01) translateX(-1px);
+  }
+  100% {
+    box-shadow: 0 0 0 24px rgba(248, 113, 113, 0), 0 0 50px rgba(248, 113, 113, 0.25);
+    transform: scale(1) translateX(0);
+  }
 }
 
-.glass-panel-glow {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 112, 186, 0.4);
-  box-shadow: 0 0 25px rgba(0, 112, 186, 0.15);
+.shockwave-active {
+  animation: shockwave 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  border-color: rgba(248, 113, 113, 0.8) !important;
 }
 
-.glow-red {
-  box-shadow: 0 0 30px rgba(239, 68, 68, 0.25);
-  border-color: rgba(239, 68, 68, 0.6) !important;
+/* Red vignette for problem section (Spec 5.3) */
+.problem-vignette {
+  background: radial-gradient(circle at 50% 50%, rgba(248, 113, 113, 0.08) 0%, transparent 70%);
 }
 
-.glow-green {
-  box-shadow: 0 0 30px rgba(16, 185, 129, 0.25);
-  border-color: rgba(16, 185, 129, 0.6) !important;
+/* Glow classes */
+.glow-success {
+  box-shadow: 0 0 30px rgba(52, 211, 153, 0.25);
+}
+.glow-danger {
+  box-shadow: 0 0 35px rgba(248, 113, 113, 0.3);
+}
+.glow-warning {
+  box-shadow: 0 0 30px rgba(251, 191, 36, 0.25);
+}
+.glow-brand {
+  box-shadow: 0 0 35px rgba(108, 123, 255, 0.3);
 }
