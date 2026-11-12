@@ -1,6 +1,7 @@
+import hashlib
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from app.db import get_db
@@ -8,6 +9,7 @@ from app.config import settings
 from app.models.escrow import Escrow
 from app.models.deliverable import Deliverable
 from app.models.arbiter import ArbiterVerdictRecord
+from app.core.deliverable_store import store_deliverable_file, inspect_deliverable, MAX_UPLOAD_SIZE_BYTES
 from app.schemas.escrow import (
     EscrowResponse,
     DeliverableCreate,
@@ -220,13 +222,27 @@ async def submit_deliverable(
             detail=f"Escrow is in state '{e.state}', expected 'FUNDS_HELD' to submit deliverable."
         )
 
+    sha256 = hashlib.sha256(req.content_ref.encode("utf-8")).hexdigest()
     deliverable = Deliverable(
         escrow_id=e.id,
         content_ref=req.content_ref,
-        submission_notes=req.submission_notes
+        submission_notes=req.submission_notes,
+        sha256=sha256,
+        inspection_status="INSPECTED"
     )
     db.add(deliverable)
     db.commit()
+
+    log_audit_event(
+        db=db,
+        actor="seller_agent",
+        event="DELIVERABLE_SUBMITTED",
+        payload={
+            "escrow_id": e.id,
+            "sha256": sha256,
+            "content_ref": req.content_ref[:200]
+        }
+    )
 
     await transition_escrow_state(
         db=db,
@@ -234,6 +250,85 @@ async def submit_deliverable(
         new_state=EscrowState.DELIVERED.value,
         actor="seller_agent",
         reason="Seller submitted deliverable assets."
+    )
+
+    db.refresh(e)
+    return build_escrow_response(e)
+
+
+@router.post("/{escrow_id}/deliver-file", response_model=EscrowResponse)
+async def upload_deliverable_file(
+    escrow_id: str,
+    file: UploadFile = File(...),
+    submission_notes: Optional[str] = Form(None),
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
+    """
+    Seller agent uploads a physical file deliverable against escrow specification.
+    Stores the file under immutable SHA-256 content addressable storage,
+    runs antivirus and binary content inspection, and records hash in the audit log.
+    """
+    e = get_escrow_for_update(db, escrow_id)
+    if not e:
+        raise HTTPException(status_code=404, detail="Escrow not found")
+
+    counterparty = e.intent.counterparty if e.intent else ""
+    verify_seller_deliver_permission(counterparty, auth)
+
+    if e.state != EscrowState.FUNDS_HELD.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Escrow is in state '{e.state}', expected 'FUNDS_HELD' to submit deliverable."
+        )
+
+    content_bytes = await file.read()
+    if len(content_bytes) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Uploaded file exceeds {MAX_UPLOAD_SIZE_BYTES} bytes."
+        )
+
+    # Store file by SHA-256
+    sha256 = store_deliverable_file(content_bytes, file.filename or "deliverable.bin")
+
+    # Run content inspection and virus scanning
+    inspection = inspect_deliverable(content_bytes, file.filename or "deliverable.bin", file.content_type)
+
+    deliverable = Deliverable(
+        escrow_id=e.id,
+        content_ref=f"sha256:{sha256}:{file.filename}",
+        submission_notes=submission_notes,
+        sha256=sha256,
+        file_name=file.filename,
+        file_size_bytes=len(content_bytes),
+        content_type=file.content_type or "application/octet-stream",
+        extracted_text=inspection.extracted_text,
+        inspection_status=inspection.inspection_status
+    )
+    db.add(deliverable)
+    db.commit()
+
+    log_audit_event(
+        db=db,
+        actor="seller_agent",
+        event="DELIVERABLE_UPLOADED",
+        payload={
+            "escrow_id": e.id,
+            "sha256": sha256,
+            "file_name": file.filename,
+            "file_size_bytes": len(content_bytes),
+            "inspection_status": inspection.inspection_status,
+            "warning": inspection.warning
+        }
+    )
+
+    await transition_escrow_state(
+        db=db,
+        escrow=e,
+        new_state=EscrowState.DELIVERED.value,
+        actor="seller_agent",
+        reason=f"Seller uploaded deliverable '{file.filename}' (SHA-256: {sha256[:16]}..., status: {inspection.inspection_status})."
     )
 
     db.refresh(e)
@@ -277,7 +372,10 @@ async def run_arbitration(
     verdict_output = await evaluate_deliverable_arbitration(
         spec=e.spec or {},
         content_ref=latest_deliverable.content_ref,
-        submission_notes=latest_deliverable.submission_notes
+        submission_notes=latest_deliverable.submission_notes,
+        sha256=latest_deliverable.sha256,
+        inspection_status=latest_deliverable.inspection_status,
+        extracted_text=latest_deliverable.extracted_text
     )
 
     verdict_rec = ArbiterVerdictRecord(

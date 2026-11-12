@@ -16,7 +16,10 @@ logger = logging.getLogger("mandate.arbiter")
 async def evaluate_deliverable_arbitration(
     spec: Dict[str, Any],
     content_ref: str,
-    submission_notes: Optional[str] = None
+    submission_notes: Optional[str] = None,
+    sha256: Optional[str] = None,
+    inspection_status: Optional[str] = None,
+    extracted_text: Optional[str] = None,
 ) -> ArbiterVerdictOutput:
     """
     Impartial AI Arbiter evaluation with dual-run self-consistency verification.
@@ -24,15 +27,45 @@ async def evaluate_deliverable_arbitration(
     - Any disagreement in verdict -> automatically forces NEEDS_HUMAN.
     - If both agree on PARTIAL -> selects the lower partial release ratio.
     - If confidence < 0.70 -> forces NEEDS_HUMAN.
+    - If deliverable is an unsupported binary -> forces NEEDS_HUMAN with stored SHA-256 reference.
     """
+    provider = get_llm_provider()
+
+    # Rule: Unsupported binaries cannot be inspected automatically by Arbiter
+    if inspection_status == "UNSUPPORTED_BINARY":
+        sha_ref = f" (SHA-256: {sha256})" if sha256 else ""
+        return ArbiterVerdictOutput(
+            verdict="NEEDS_HUMAN",
+            confidence=0.0,
+            criteria_results=[],
+            partial_ratio=0.0,
+            explanation=f"Unsupported binary deliverable{sha_ref} cannot be automatically verified. Escalated to human supervisor.",
+            model=getattr(provider, "model_name", "mock"),
+            prompt_version=PROMPT_VERSION
+        )
+
+    if inspection_status == "MALICIOUS":
+        sha_ref = f" (SHA-256: {sha256})" if sha256 else ""
+        return ArbiterVerdictOutput(
+            verdict="FAIL",
+            confidence=1.0,
+            criteria_results=[],
+            partial_ratio=0.0,
+            explanation=f"Malicious payload detected in deliverable{sha_ref}. Payment rejected.",
+            model=getattr(provider, "model_name", "mock"),
+            prompt_version=PROMPT_VERSION
+        )
+
     spec_json = json.dumps(spec, indent=2)
+    payload_to_evaluate = extracted_text if extracted_text else content_ref
+    if sha256:
+        payload_to_evaluate = f"[SHA-256: {sha256}]\n{payload_to_evaluate}"
+
     user_prompt = ARBITER_USER_PROMPT_TEMPLATE.format(
         spec_json=spec_json,
         submission_notes=submission_notes or "No additional notes provided by seller.",
-        content_ref=content_ref
+        content_ref=payload_to_evaluate
     )
-
-    provider = get_llm_provider()
 
     async def _single_run() -> ArbiterVerdictOutput:
         try:

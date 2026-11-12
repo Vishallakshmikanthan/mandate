@@ -46,6 +46,10 @@ class DeliverableResponse(BaseModel):
     escrow_id: str
     content_ref: str
     submission_notes: Optional[str] = None
+    sha256: Optional[str] = None
+    file_name: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    inspection_status: Optional[str] = None
     submitted_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

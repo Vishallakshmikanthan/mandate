@@ -67,6 +67,22 @@ def init_db():
                         conn.exec_driver_sql("ALTER TABLE mandates ADD COLUMN key_id VARCHAR(64)")
                     if "signature_algorithm" not in existing_cols:
                         conn.exec_driver_sql("ALTER TABLE mandates ADD COLUMN signature_algorithm VARCHAR(32) DEFAULT 'hmac-sha256'")
+
+                    res_deliv = conn.exec_driver_sql("PRAGMA table_info(deliverables)").fetchall()
+                    existing_deliv_cols = {row[1] for row in res_deliv}
+                    if "sha256" not in existing_deliv_cols:
+                        conn.exec_driver_sql("ALTER TABLE deliverables ADD COLUMN sha256 VARCHAR(64)")
+                    if "file_name" not in existing_deliv_cols:
+                        conn.exec_driver_sql("ALTER TABLE deliverables ADD COLUMN file_name VARCHAR(255)")
+                    if "file_size_bytes" not in existing_deliv_cols:
+                        conn.exec_driver_sql("ALTER TABLE deliverables ADD COLUMN file_size_bytes INTEGER")
+                    if "content_type" not in existing_deliv_cols:
+                        conn.exec_driver_sql("ALTER TABLE deliverables ADD COLUMN content_type VARCHAR(100)")
+                    if "extracted_text" not in existing_deliv_cols:
+                        conn.exec_driver_sql("ALTER TABLE deliverables ADD COLUMN extracted_text TEXT")
+                    if "inspection_status" not in existing_deliv_cols:
+                        conn.exec_driver_sql("ALTER TABLE deliverables ADD COLUMN inspection_status VARCHAR(30) DEFAULT 'INSPECTED'")
+
                     conn.commit()
                 except Exception:
                     pass

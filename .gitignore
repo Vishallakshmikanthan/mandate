@@ -72,4 +72,7 @@ screens-ref1/
 frontend-ref/
 *.zip
 
+# Deliverable & Checkpoint Local Storage
+data/
+
 
