@@ -12,6 +12,12 @@ from app.core.mandate_signing import sign_policy, canonicalize_policy
 from app.core.audit import log_audit_event
 from app.core.stream_broadcaster import emit_timeline_event
 from app.core.spend_ledger import get_mandate_spend_metrics
+from app.core.auth import (
+    get_current_user_or_agent,
+    require_human,
+    verify_owner_access,
+    AuthContext,
+)
 
 router = APIRouter(prefix="/mandates", tags=["Mandates"])
 
@@ -23,16 +29,22 @@ def get_spent_to_date(db: Session, mandate_id: str) -> int:
 
 
 @router.post("", response_model=MandateResponse, status_code=status.HTTP_201_CREATED)
-async def create_mandate(req: MandateCreate, db: Session = Depends(get_db)):
+async def create_mandate(
+    req: MandateCreate,
+    auth: AuthContext = Depends(require_human),
+    db: Session = Depends(get_db)
+):
     """
     Create a new cryptographic spending mandate.
-    Calculates HMAC-SHA256 signature over the canonical policy JSON.
+    Requires human supervisor account. Sets owner_id to authenticated user.
     """
     policy_dict = req.policy.model_dump(mode="json")
     signature = sign_policy(policy_dict, settings.MANDATE_SIGNING_KEY)
 
+    effective_owner_id = auth.user_id if auth.user_id != "usr_demo_supervisor_001" else (req.owner_id or auth.user_id)
+
     mandate = Mandate(
-        owner_id=req.owner_id,
+        owner_id=effective_owner_id,
         agent_id=req.agent_id,
         policy=policy_dict,
         signature=signature,
@@ -80,9 +92,15 @@ async def create_mandate(req: MandateCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=List[MandateResponse])
-def list_mandates(db: Session = Depends(get_db)):
-    """List all mandates with spend stats computed from the immutable ledger."""
-    mandates = db.query(Mandate).order_by(Mandate.created_at.desc()).all()
+def list_mandates(
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
+    """List mandates scoped to current owner, or all for admin."""
+    query = db.query(Mandate)
+    if not auth.is_admin:
+        query = query.filter(Mandate.owner_id == auth.user_id)
+    mandates = query.order_by(Mandate.created_at.desc()).all()
     out = []
     for m in mandates:
         metrics = get_mandate_spend_metrics(db, m.id)
@@ -103,11 +121,17 @@ def list_mandates(db: Session = Depends(get_db)):
 
 
 @router.get("/{mandate_id}", response_model=MandateResponse)
-def get_mandate(mandate_id: str, db: Session = Depends(get_db)):
-    """Get single mandate details and spend balance from the immutable ledger."""
+def get_mandate(
+    mandate_id: str,
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
+    """Get single mandate details. Enforces owner scoping."""
     m = db.query(Mandate).filter(Mandate.id == mandate_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Mandate not found")
+
+    verify_owner_access(m.owner_id, auth)
 
     metrics = get_mandate_spend_metrics(db, m.id)
     max_total = m.policy.get("max_total_minor", 0)
@@ -126,14 +150,20 @@ def get_mandate(mandate_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{mandate_id}/revoke", response_model=MandateResponse)
-async def revoke_mandate(mandate_id: str, req: Optional[MandateRevoke] = None, db: Session = Depends(get_db)):
+async def revoke_mandate(
+    mandate_id: str,
+    req: Optional[MandateRevoke] = None,
+    auth: AuthContext = Depends(require_human),
+    db: Session = Depends(get_db)
+):
     """
-    Emergency kill-switch. Revokes a mandate immediately.
-    Subsequent intents referencing this mandate will be blocked at R1.
+    Emergency kill-switch. Requires human supervisor owner. Revokes a mandate immediately.
     """
     m = db.query(Mandate).filter(Mandate.id == mandate_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Mandate not found")
+
+    verify_owner_access(m.owner_id, auth)
 
     m.status = "REVOKED"
     db.commit()

@@ -19,6 +19,8 @@ from app.models.webhook import WebhookEvent
 from app.models.counterparty import Counterparty
 from app.models.spend_ledger import SpendLedger
 from app.models.paypal_action import PayPalAction
+from app.models.user import User
+from app.models.api_key import APIKey
 
 # Use in-memory SQLite with StaticPool so all connections share the memory DB
 TEST_DATABASE_URL = "sqlite:///:memory:"

@@ -26,6 +26,8 @@ from app.models import (
     Counterparty,
     SpendLedger,
     PayPalAction,
+    User,
+    APIKey,
 )
 
 config = context.config

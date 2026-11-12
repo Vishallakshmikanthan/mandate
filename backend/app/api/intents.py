@@ -17,21 +17,45 @@ from app.core.audit import log_audit_event
 from app.core.stream_broadcaster import emit_timeline_event
 from app.core.spend_ledger import get_mandate_for_update, get_mandate_spend_metrics, record_spend_entry
 from app.paypal.orders import create_paypal_order
+from app.core.auth import (
+    get_current_user_or_agent,
+    verify_owner_access,
+    AuthContext,
+)
 
 router = APIRouter(prefix="/intents", tags=["Payment Intents"])
 
 
 @router.post("", response_model=PaymentIntentResponse, status_code=status.HTTP_201_CREATED)
-async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(get_db)):
+async def submit_payment_intent(
+    req: PaymentIntentCreate,
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
     """
     Submit a payment intent through the Mandate Gateway.
     Executes Policy Engine rules (R1-R10) and LLM Risk Scorer.
     Serializes concurrent budget checks with row locking and spend ledger accounting.
+    Enforces scope 'intents:create' and mandate owner access.
     """
+    if not auth.has_scope("intents:create"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: missing required scope 'intents:create'."
+        )
+
     # 0. Acquire row-level lock on the governing mandate
     mandate = get_mandate_for_update(db, req.mandate_id)
     if not mandate:
         raise HTTPException(status_code=404, detail="Mandate not found")
+
+    verify_owner_access(mandate.owner_id, auth)
+
+    if auth.actor_type == "AGENT" and auth.mandate_id and auth.mandate_id != mandate.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: API key is restricted to mandate '{auth.mandate_id}', cannot spend against '{mandate.id}'."
+        )
 
     now_utc = datetime.now(timezone.utc)
 
@@ -224,9 +248,15 @@ async def submit_payment_intent(req: PaymentIntentCreate, db: Session = Depends(
 
 
 @router.get("", response_model=List[PaymentIntentResponse])
-def list_intents(db: Session = Depends(get_db)):
-    """List recent payment intents."""
-    intents = db.query(PaymentIntent).order_by(PaymentIntent.created_at.desc()).limit(100).all()
+def list_intents(
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
+    """List recent payment intents scoped to current owner, or all for admin."""
+    query = db.query(PaymentIntent).join(Mandate, PaymentIntent.mandate_id == Mandate.id)
+    if not auth.is_admin:
+        query = query.filter(Mandate.owner_id == auth.user_id)
+    intents = query.order_by(PaymentIntent.created_at.desc()).limit(100).all()
     out = []
     for i in intents:
         escrow = db.query(Escrow).filter(Escrow.intent_id == i.id).first()
@@ -249,11 +279,19 @@ def list_intents(db: Session = Depends(get_db)):
 
 
 @router.get("/{intent_id}", response_model=PaymentIntentResponse)
-def get_intent(intent_id: str, db: Session = Depends(get_db)):
-    """Get single intent details."""
+def get_intent(
+    intent_id: str,
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
+    """Get single intent details with owner access enforcement."""
     i = db.query(PaymentIntent).filter(PaymentIntent.id == intent_id).first()
     if not i:
         raise HTTPException(status_code=404, detail="Payment intent not found")
+
+    if i.mandate:
+        verify_owner_access(i.mandate.owner_id, auth)
+
     escrow = db.query(Escrow).filter(Escrow.intent_id == i.id).first()
     return PaymentIntentResponse(
         id=i.id,

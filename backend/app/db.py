@@ -50,6 +50,8 @@ def init_db():
     from app.models.counterparty import Counterparty
     from app.models.spend_ledger import SpendLedger
     from app.models.paypal_action import PayPalAction
+    from app.models.user import User
+    from app.models.api_key import APIKey
 
     if settings.APP_ENV in ("demo", "test"):
         Base.metadata.create_all(bind=engine)

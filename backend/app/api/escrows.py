@@ -23,6 +23,14 @@ from app.core.spend_ledger import get_mandate_for_update, get_mandate_spend_metr
 from app.core.policy_engine import evaluate_policy_rules
 from app.models.counterparty import Counterparty
 from app.models.mandate import Mandate
+from app.models.intent import PaymentIntent
+from app.core.auth import (
+    get_current_user_or_agent,
+    require_human,
+    verify_owner_access,
+    verify_seller_deliver_permission,
+    AuthContext,
+)
 from app.paypal.orders import (
     create_paypal_order,
     authorize_paypal_order,
@@ -72,16 +80,30 @@ def build_escrow_response(e: Escrow) -> EscrowResponse:
 
 
 @router.get("", response_model=List[EscrowResponse])
-def list_escrows(db: Session = Depends(get_db)):
-    escrows = db.query(Escrow).order_by(Escrow.created_at.desc()).limit(100).all()
+def list_escrows(
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Escrow)
+    if not auth.is_admin:
+        query = query.filter(
+            Escrow.intent.has(PaymentIntent.mandate.has(Mandate.owner_id == auth.user_id))
+        )
+    escrows = query.order_by(Escrow.created_at.desc()).limit(100).all()
     return [build_escrow_response(e) for e in escrows]
 
 
 @router.get("/{escrow_id}", response_model=EscrowResponse)
-def get_escrow(escrow_id: str, db: Session = Depends(get_db)):
+def get_escrow(
+    escrow_id: str,
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
     e = db.query(Escrow).filter(Escrow.id == escrow_id).first()
     if not e:
         raise HTTPException(status_code=404, detail="Escrow contract not found")
+    if e.intent and e.intent.mandate:
+        verify_owner_access(e.intent.mandate.owner_id, auth)
     return build_escrow_response(e)
 
 
@@ -173,11 +195,22 @@ async def handle_approval_return(
 
 
 @router.post("/{escrow_id}/deliver", response_model=EscrowResponse)
-async def submit_deliverable(escrow_id: str, req: DeliverableCreate, db: Session = Depends(get_db)):
-    """Seller agent submits deliverable against escrow spec."""
+async def submit_deliverable(
+    escrow_id: str,
+    req: DeliverableCreate,
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
+    """
+    Seller agent submits deliverable against escrow spec.
+    Enforces that agent API key matches counterparty handle or caller is human.
+    """
     e = get_escrow_for_update(db, escrow_id)
     if not e:
         raise HTTPException(status_code=404, detail="Escrow not found")
+
+    counterparty = e.intent.counterparty if e.intent else ""
+    verify_seller_deliver_permission(counterparty, auth)
 
     if e.state != EscrowState.FUNDS_HELD.value:
         raise HTTPException(
@@ -206,11 +239,18 @@ async def submit_deliverable(escrow_id: str, req: DeliverableCreate, db: Session
 
 
 @router.post("/{escrow_id}/arbitrate", response_model=EscrowResponse)
-async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
+async def run_arbitration(
+    escrow_id: str,
+    auth: AuthContext = Depends(get_current_user_or_agent),
+    db: Session = Depends(get_db)
+):
     """Trigger AI Arbiter to evaluate deliverable and settle PayPal funds."""
     e = get_escrow_for_update(db, escrow_id)
     if not e:
         raise HTTPException(status_code=404, detail="Escrow not found")
+
+    if e.intent and e.intent.mandate:
+        verify_owner_access(e.intent.mandate.owner_id, auth)
 
     if e.state != EscrowState.DELIVERED.value:
         raise HTTPException(
@@ -368,11 +408,19 @@ async def run_arbitration(escrow_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{escrow_id}/human-decision", response_model=EscrowResponse)
-async def submit_human_decision(escrow_id: str, req: HumanDecisionRequest, db: Session = Depends(get_db)):
-    """Human supervisor override for escalated or contested escrows."""
+async def submit_human_decision(
+    escrow_id: str,
+    req: HumanDecisionRequest,
+    auth: AuthContext = Depends(require_human),
+    db: Session = Depends(get_db)
+):
+    """Human supervisor override for escalated or contested escrows. Restricted to human owners."""
     e = get_escrow_for_update(db, escrow_id)
     if not e:
         raise HTTPException(status_code=404, detail="Escrow not found")
+
+    if e.intent and e.intent.mandate:
+        verify_owner_access(e.intent.mandate.owner_id, auth)
 
     action_upper = req.action.strip().upper()
 
