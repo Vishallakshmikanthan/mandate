@@ -61,3 +61,15 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# SQLite runtime journals
+*.db-shm
+*.db-wal
+
+# Design reference assets & unpacked zips
+screens-ref/
+screens-ref1/
+frontend-ref/
+*.zip
+
+
