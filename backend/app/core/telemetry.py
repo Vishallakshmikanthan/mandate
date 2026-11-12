@@ -6,9 +6,7 @@ Provides:
 3. Real-time metrics collector (decisions, PayPal latency/errors, LLM latency/tokens/cost)
 4. System health and alert monitors (stuck escrows, hold expiry within 24h, audit integrity, webhook failures)
 """
-import os
 import json
-import time
 import logging
 from contextvars import ContextVar
 from datetime import datetime, timezone, timedelta
@@ -193,7 +191,7 @@ class MetricsCollector:
         expiring_threshold = now + timedelta(hours=24)
         expiring_escrows = db.query(Escrow).filter(
             Escrow.state == EscrowState.FUNDS_HELD.value,
-            Escrow.hold_expires_at != None,
+            Escrow.hold_expires_at.isnot(None),
             Escrow.hold_expires_at > now,
             Escrow.hold_expires_at < expiring_threshold
         ).all()

@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from fastapi.responses import RedirectResponse
@@ -42,7 +42,6 @@ from app.paypal.orders import (
     void_paypal_authorization
 )
 from app.paypal.client import get_paypal_client
-from app.core.stream_broadcaster import emit_timeline_event
 
 router = APIRouter(prefix="/escrows", tags=["Escrows"])
 
@@ -506,7 +505,7 @@ async def run_arbitration(
             escrow=e,
             new_state=EscrowState.REFUNDED.value,
             actor="paypal",
-            reason=f"Arbiter FAIL. Authorization voided. Buyer refunded."
+            reason="Arbiter FAIL. Authorization voided. Buyer refunded."
         )
 
     else:  # NEEDS_HUMAN

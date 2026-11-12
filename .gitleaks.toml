@@ -1,0 +1,16 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for synthetic test fixtures and documentation"
+paths = [
+    '''backend/tests/.*''',
+    '''scenarios/.*''',
+    '''docs/.*''',
+    '''\.env\.example$'''
+]
+regexes = [
+    '''mock_.*''',
+    '''test_.*''',
+    '''SANDBOX_.*'''
+]

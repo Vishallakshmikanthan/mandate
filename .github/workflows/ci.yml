@@ -1,4 +1,4 @@
-name: CI
+name: CI Hardening & Verification
 
 on:
   push:
@@ -7,36 +7,66 @@ on:
     branches: [ main ]
 
 jobs:
-  test-backend:
-    name: Backend Tests & Quality
+  lint-backend:
+    name: Backend Lint & Typecheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Linting & Typecheck Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy pip-audit -r backend/requirements.txt
+
+      - name: Ruff Linter
+        run: ruff check backend
+
+      - name: Mypy Type Checker
+        run: mypy backend/app
+
+      - name: Dependency Audit (pip-audit)
+        run: pip-audit -r backend/requirements.txt || true
+
+  test-backend:
+    name: Backend Tests & Coverage Enforcement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
 
       - name: Install Dependencies
-        working-directory: ./backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r backend/requirements.txt
 
-      - name: Run Test Suite
-        working-directory: ./backend
+      - name: Run Pytest with Coverage (>80% core/ & paypal/)
         run: |
-          pytest -v --tb=short
+          export PYTHONPATH="backend"
+          pytest backend/tests -v --tb=short --cov=backend/app/core --cov=backend/app/paypal --cov-report=term --cov-fail-under=80
 
-  build-frontend:
-    name: Frontend Build & Typecheck
+      - name: Run Red-Team Eval Suite
+        run: |
+          export PYTHONPATH="backend"
+          python scripts/eval_redteam.py --split dev --provider mock
+
+  frontend-check:
+    name: Frontend Typecheck, Audit & Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -47,6 +77,43 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      - name: Build Frontend
+      - name: Frontend Dependency Audit
+        working-directory: ./frontend
+        run: npm audit --audit-level=high || true
+
+      - name: Frontend Typecheck
+        working-directory: ./frontend
+        run: npm run typecheck
+
+      - name: Frontend Build
         working-directory: ./frontend
         run: npm run build
+
+  docker-build:
+    name: Docker Image Build Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend Docker Image
+        run: docker build -t mandate-backend:ci ./backend
+
+      - name: Build Frontend Docker Image
+        run: docker build -t mandate-frontend:ci ./frontend
+
+  secret-scanning:
+    name: Secret Scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true

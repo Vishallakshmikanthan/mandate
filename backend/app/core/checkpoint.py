@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from app.models.audit import AuditLog
 from app.core.audit import verify_audit_chain, GENESIS_HASH
 from app.core.mandate_signing import (
-    canonicalize_policy,
     generate_ed25519_keypair,
     sign_policy_ed25519,
     verify_policy_ed25519,

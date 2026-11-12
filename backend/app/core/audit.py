@@ -1,5 +1,4 @@
 import hashlib
-import json
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from sqlalchemy.exc import IntegrityError

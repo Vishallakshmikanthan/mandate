@@ -36,6 +36,7 @@ node_modules/
 .next/
 out/
 build/
+*.tsbuildinfo
 .npm
 npm-debug.log*
 yarn-debug.log*

@@ -1,6 +1,6 @@
 import { Variants } from "framer-motion";
 
-export const easeOutCubic = [0.16, 1, 0.3, 1];
+export const easeOutCubic = [0.16, 1, 0.3, 1] as const;
 
 export const fadeIn: Variants = {
   hidden: { opacity: 0 },

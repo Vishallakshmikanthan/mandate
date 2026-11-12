@@ -1,6 +1,5 @@
 import os
 import io
-import re
 import zipfile
 import hashlib
 import logging

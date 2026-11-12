@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.audit import AuditLog
 from app.schemas.audit import AuditLogResponse, AuditVerifyResponse, AuditCheckpointResponse
-from app.core.audit import verify_audit_chain
 from app.core.checkpoint import (
     publish_checkpoint,
     get_latest_external_checkpoint,
@@ -24,7 +23,7 @@ def get_audit_logs(
 ):
     """Retrieve chronologically ordered tamper-evident audit logs."""
     logs = db.query(AuditLog).order_by(AuditLog.id.desc()).offset(offset).limit(limit).all()
-    return [AuditLogResponse.model_validate(l) for l in logs]
+    return [AuditLogResponse.model_validate(log_entry) for log_entry in logs]
 
 
 @router.get("/verify", response_model=AuditVerifyResponse)

@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from sqlalchemy.orm import Session
 from app.agents.buyer import BuyerAgent
 from app.agents.seller import SellerAgent
@@ -24,7 +24,7 @@ from app.models.arbiter import ArbiterVerdictRecord
 from app.models.counterparty import Counterparty
 from app.schemas.escrow import EscrowState
 from app.config import settings
-from app.core.cost_control import cost_controller, NegotiationTurnCapExceededError
+from app.core.cost_control import cost_controller
 
 logger = logging.getLogger("mandate.orchestrator")
 
@@ -63,7 +63,7 @@ class AgentOrchestrator:
             event_type="AGENT_INQUIRY",
             actor="buyer_agent",
             step="1. Negotiation Inquiry",
-            summary=f"Buyer agent reaches out to seller for logo design package.",
+            summary="Buyer agent reaches out to seller for logo design package.",
             status="INFO",
             data={"target_budget": "$120.00", "currency": "USD"}
         )

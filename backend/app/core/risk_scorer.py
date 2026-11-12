@@ -1,7 +1,7 @@
 import re
 import unicodedata
 import logging
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Any, Tuple, Optional
 from pydantic import BaseModel, Field
 from app.llm.provider import get_llm_provider
 from app.llm.prompts.risk_scorer import (

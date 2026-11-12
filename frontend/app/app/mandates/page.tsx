@@ -96,7 +96,7 @@ export default function MandatesListPage() {
               </thead>
               <tbody>
                 {mandates.map((m) => {
-                  const policy = m.policy || {};
+                  const policy: any = m.policy || {};
                   const maxTotal = policy.max_total_minor || 50000;
                   const perTxn = policy.max_per_transaction_minor || 20000;
                   const spent = m.spent_to_date_minor || 0;

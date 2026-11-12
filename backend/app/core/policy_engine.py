@@ -1,7 +1,6 @@
 from datetime import datetime, timezone, time
 from typing import List, Dict, Any, Optional
 from app.schemas.intent import RuleEvaluationResult
-from app.schemas.mandate import MandatePolicy
 from app.core.mandate_signing import verify_mandate_signature
 
 

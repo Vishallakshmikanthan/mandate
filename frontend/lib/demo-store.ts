@@ -40,6 +40,9 @@ export interface MandateItem {
   owner_id: string;
   status: "ACTIVE" | "REVOKED";
   signature: string;
+  public_key?: string;
+  key_id?: string;
+  signature_algorithm?: string;
   created_at: string;
   expires_at: string;
   spent_to_date_minor: number;
@@ -67,6 +70,7 @@ export interface PaymentIntentItem {
   decision: "APPROVED" | "BLOCKED" | "ESCALATED";
   risk_score: number;
   flags: string[];
+  escrow_id?: string;
   paypal_order_id?: string;
   paypal_authorization_id?: string;
   decision_reasons: RuleResult[];
@@ -85,9 +89,10 @@ export interface EscrowItem {
   id: string;
   intent_id: string;
   agent_id: string;
+  buyer_agent_id?: string;
   counterparty: string;
   amount_minor: number;
-  state: "HELD" | "DELIVERED" | "ARBITRATION" | "RELEASED" | "REFUNDED";
+  state: "HELD" | "DELIVERED" | "ARBITRATION" | "RELEASED" | "REFUNDED" | "FUNDS_HELD" | "UNDER_ARBITRATION" | "ORDER_CREATED" | "BUYER_APPROVED" | "VOIDED" | "BLOCKED" | "NEEDS_HUMAN" | string;
   paypal_order_id: string;
   paypal_authorization_id?: string;
   paypal_capture_id?: string;
@@ -104,11 +109,13 @@ export interface EscrowItem {
     file_name?: string;
   };
   verdict?: {
-    result: "RELEASE" | "REFUND" | "SPLIT";
+    result: "RELEASE" | "REFUND" | "SPLIT" | string;
     confidence: number;
     explanation: string;
     criteria_results: EscrowCriterion[];
+    verdict?: string;
   };
+  verdicts?: any[];
 }
 
 export interface AuditRecord {

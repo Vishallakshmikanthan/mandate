@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 from typing import Set, Optional
 from app.config import settings

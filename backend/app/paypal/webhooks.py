@@ -1,6 +1,5 @@
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.paypal.client import get_paypal_client

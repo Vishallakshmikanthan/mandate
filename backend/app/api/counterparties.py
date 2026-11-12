@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.counterparty import Counterparty
-from app.schemas.counterparty import CounterpartyCreate, CounterpartyResponse, CounterpartyUpdate
+from app.schemas.counterparty import CounterpartyCreate, CounterpartyResponse
 from app.core.auth import get_current_user_or_agent, require_human, AuthContext
 
 router = APIRouter(prefix="/counterparties", tags=["Counterparties"])
@@ -98,23 +98,3 @@ def block_counterparty(
     db.refresh(cp)
     return cp
 
-    cp.status = "VERIFIED"
-    cp.verified_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(cp)
-    return cp
-
-
-@router.post("/{id_or_handle}/block", response_model=CounterpartyResponse)
-def block_counterparty(id_or_handle: str, db: Session = Depends(get_db)):
-    """Block a counterparty."""
-    cp = db.query(Counterparty).filter(
-        (Counterparty.id == id_or_handle) | (Counterparty.handle == id_or_handle)
-    ).first()
-    if not cp:
-        raise HTTPException(status_code=404, detail=f"Counterparty '{id_or_handle}' not found.")
-
-    cp.status = "BLOCKED"
-    db.commit()
-    db.refresh(cp)
-    return cp

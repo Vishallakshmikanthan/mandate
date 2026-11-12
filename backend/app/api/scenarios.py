@@ -1,11 +1,10 @@
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.mandate import Mandate
-from app.models.intent import PaymentIntent
 from app.models.redteam import RedTeamRun
 from app.models.counterparty import Counterparty
 from app.core.mandate_signing import sign_policy
