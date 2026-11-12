@@ -51,8 +51,20 @@ def test_app_env_prod_refuses_default_key():
     with pytest.raises(ValueError, match="must be at least 32 bytes long"):
         Settings(APP_ENV="dev", MANDATE_SIGNING_KEY="too_short_key")
 
-    # In prod with secure 32+ byte key -> succeeds
+    # In prod with secure 32+ byte key and PostgreSQL -> succeeds
     valid_key = "a" * 32
-    s = Settings(APP_ENV="prod", MANDATE_SIGNING_KEY=valid_key)
+    s = Settings(
+        APP_ENV="prod",
+        MANDATE_SIGNING_KEY=valid_key,
+        DATABASE_URL="postgresql://mandate:mandate@localhost:5432/mandate"
+    )
     assert s.APP_ENV == "prod"
     assert s.MANDATE_SIGNING_KEY == valid_key
+
+    # In prod with SQLite -> must raise ValueError
+    with pytest.raises(ValueError, match="must be a PostgreSQL connection URL"):
+        Settings(
+            APP_ENV="prod",
+            MANDATE_SIGNING_KEY=valid_key,
+            DATABASE_URL="sqlite:///./mandate.db"
+        )

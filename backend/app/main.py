@@ -18,6 +18,9 @@ async def lifespan(app: FastAPI):
         if not client.simulation_mode and not settings.PAYPAL_WEBHOOK_ID:
             raise ValueError("PAYPAL_WEBHOOK_ID must be configured in production (APP_ENV=prod) when not in simulation mode.")
 
+    from app.core.stream_broadcaster import broadcaster
+    await broadcaster.start()
+
     expiry_task = None
     if settings.APP_ENV != "test":
         from app.core.expiry import run_expiry_loop
@@ -26,6 +29,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await broadcaster.stop()
         if expiry_task and not expiry_task.done():
             expiry_task.cancel()
             try:

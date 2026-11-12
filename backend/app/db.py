@@ -51,4 +51,18 @@ def init_db():
     from app.models.spend_ledger import SpendLedger
     from app.models.paypal_action import PayPalAction
 
-    Base.metadata.create_all(bind=engine)
+    if settings.APP_ENV in ("demo", "test"):
+        Base.metadata.create_all(bind=engine)
+    else:
+        import os
+        from alembic.config import Config
+        from alembic import command
+
+        backend_dir = os.path.dirname(os.path.dirname(__file__))
+        ini_path = os.path.join(backend_dir, "alembic.ini")
+        if not os.path.exists(ini_path):
+            ini_path = os.path.join(os.path.dirname(backend_dir), "alembic.ini")
+
+        alembic_cfg = Config(ini_path)
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+        command.upgrade(alembic_cfg, "head")

@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,8 +17,9 @@ class Settings(BaseSettings):
     # Security
     MANDATE_SIGNING_KEY: str = "mandate_super_secure_secret_signing_key_32_bytes_min!"
 
-    # Database
+    # Database & Cache
     DATABASE_URL: str = "sqlite:///./mandate.db"
+    REDIS_URL: Optional[str] = None
 
     # PayPal
     PAYPAL_CLIENT_ID: str = ""
@@ -54,6 +56,10 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"Refusing to start in {env} environment: MANDATE_SIGNING_KEY must be at least 32 bytes long."
                 )
+        if env == "prod" and self.DATABASE_URL.startswith("sqlite"):
+            raise ValueError(
+                "Refusing to start in prod environment: DATABASE_URL must be a PostgreSQL connection URL, not SQLite."
+            )
         return self
 
 
