@@ -100,6 +100,7 @@ function ScenariosContent() {
   const [activeKey, setActiveKey] = useState<string>(initialKey);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [lastResult, setLastResult] = useState<any>(null);
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
   const [auditStream, setAuditStream] = useState<any[]>([]);
 
   const current = DEFAULT_SCENARIOS[activeKey] || DEFAULT_SCENARIOS.attack;
@@ -110,9 +111,9 @@ function ScenariosContent() {
       if (logs && logs.length > 0) {
         setAuditStream(
           logs.slice(0, 6).map((log: any) => ({
-            id: `#${log.sequence_number ?? log.id?.slice(0, 4)}`,
+            id: `#${log.sequence_number ?? String(log.id ?? "").slice(0, 4)}`,
             actor: log.actor || "GATEWAY",
-            event: log.event_type || "LOGGED",
+            event: log.event || log.event_type || "LOGGED",
             status: "Chained",
           }))
         );
@@ -146,13 +147,15 @@ function ScenariosContent() {
     if (!target) return;
     setIsRunning(true);
     setLastResult(null);
+    setScenarioError(null);
 
     try {
       const res = await runScenarioApi(target.apiKey);
       setLastResult(res);
       await loadAudit();
     } catch (err: any) {
-      alert(`Scenario run failed: ${err.message}`);
+      console.error("Scenario run error:", err);
+      setScenarioError(err?.message || "Scenario run encountered an issue.");
     } finally {
       setIsRunning(false);
     }
@@ -198,6 +201,13 @@ function ScenariosContent() {
           Watch Mandate stop an attack in real time
         </h1>
       </div>
+
+      {scenarioError && (
+        <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between animate-in fade-in">
+          <span>{scenarioError}</span>
+          <button onClick={() => setScenarioError(null)} className="text-neutral-400 hover:text-white ml-2 text-xs">✕</button>
+        </div>
+      )}
 
       {/* Top 3 Scenario Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
